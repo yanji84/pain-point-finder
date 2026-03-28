@@ -37,6 +37,7 @@ Read these files from `/tmp/gapscout-<scan-id>/`:
 - `deep-research-summary.json` — deep research verification results (if exists)
 - `deep-research-verification-round-*.json` — per-round verification detail (if exists)
 - `community-validation.json` — community validation suggestions per opportunity (if exists)
+- `connection-index.json` — team LinkedIn connection index with network reach data (if exists)
 - `delta-summary.json` — delta comparison with previous scan (if exists, resume mode only)
 
 ## Task
@@ -219,6 +220,34 @@ Write to: `/tmp/gapscout-<scan-id>/report.json`
     ],
     "crossCuttingCommunities": []
   },
+  "networkReach": {
+    "summary": {
+      "totalConnectionsIndexed": "<N>",
+      "teamMembersIndexed": "<N>",
+      "competitorConnections": "<N>",
+      "personaMatches": "<N>",
+      "opportunitiesWithCoverage": "<N>/<total>"
+    },
+    "perOpportunity": [
+      {
+        "gap": "<name>",
+        "totalRelevantConnections": "<N>",
+        "competitorConnections": "<N>",
+        "personaMatches": "<N>",
+        "topConnections": [
+          {
+            "name": "Jane Doe",
+            "company": "Acme Corp",
+            "position": "VP of Product",
+            "connectedVia": ["mike", "sarah"],
+            "matchType": "persona_match",
+            "suggestedOutreach": "<what to ask>"
+          }
+        ],
+        "teamMembersToActivate": ["mike", "sarah"]
+      }
+    ]
+  },
   "deepResearchVerification": {
     "roundsCompleted": N,
     "converged": true/false,
@@ -262,3 +291,4 @@ Write to: `/tmp/gapscout-<scan-id>/report.json`
 - If input files are missing, report error — do not hallucinate data
 - **CITATION BLOCKLIST ENFORCEMENT**: If `watchdog-blocklist.json` exists, strip any URL appearing in `blockedCitations` from the final report. Replace with `"citationStatus": "REMOVED_BY_WATCHDOG"`. Report total removed count in `dataQuality.blockedCitationsRemoved`.
 - **SCHEMA STANDARDIZATION**: All synthesis sprint data MUST use these canonical sub-key names in the report: `painThemes` (not `painPoints` or `pains`), `unmetNeeds` (not `needs` or `gaps`), `switchingSignals` (not `switches` or `migrations`), `opportunities` (not `gaps` or `ideas`). If a synthesis file uses a variant name, map it to the canonical name.
+- **NETWORK REACH**: If `connection-index.json` does not exist, set `networkReach` to `null` in the report. Do not fabricate connection data.

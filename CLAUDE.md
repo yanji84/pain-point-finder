@@ -14,6 +14,24 @@ Examples:
 - `/gapscout Jira, Asana, Linear, Monday`
 - `/gapscout` (no input → suggests markets from HN frontpage)
 
+## Team LinkedIn Connections (Optional)
+
+Upload your team's LinkedIn connections to get personalized outreach suggestions in the report. Each team member exports their connections from LinkedIn ([instructions](https://www.linkedin.com/help/linkedin/answer/a566336)) and places the CSV in the scan directory:
+
+```bash
+mkdir -p /tmp/gapscout-<scan-id>/team-connections/
+cp ~/Downloads/Connections.csv /tmp/gapscout-<scan-id>/team-connections/mike.csv
+cp ~/Downloads/Connections.csv /tmp/gapscout-<scan-id>/team-connections/sarah.csv
+```
+
+The pipeline will:
+- Parse and merge all team members' connections
+- Match connections to competitor companies and target personas
+- Generate "Network Reach" sections in the report with specific outreach suggestions
+- Attribute each connection to the team member(s) who know them
+
+Privacy: Connection data is processed locally only. Names/emails never sent to external APIs.
+
 ## Architecture
 
 The `/gapscout` skill spawns the **orchestrator agent** (`.claude/agents/orchestrator.md`) which coordinates the entire pipeline. Default mode is **iterative draft** — a lean first pass refined through critique→debate→improve cycles.
@@ -25,6 +43,7 @@ orchestrator (single brain, owns all stage transitions)
   ├── planner (4 research sub-agents)
   ├── discovery team (4 coordinators, each with sub-teams)
   ├── trust-scorer (4 dimension sub-agents)
+  ├── connection-indexer (optional — if team LinkedIn CSVs provided)
   ├── scanner team (all sources in parallel + broadening loop)
   ├── citation-watchdog (background — validates data as it appears)
   ├── LEAN synthesis (6 core sprints: map → pain → needs → switching → gaps → scoring)
@@ -79,6 +98,7 @@ orchestrator
 | synthesis-market-sizing | `.claude/agents/synthesis-market-sizing.md` | TAM/SAM/SOM and GTM analysis |
 | synthesis-causal-chains | `.claude/agents/synthesis-causal-chains.md` | Root cause chain analysis |
 | synthesis-strategic-narrative | `.claude/agents/synthesis-strategic-narrative.md` | Strategic narrative and recommendations |
+| connection-indexer | `.claude/agents/connection-indexer.md` | Parse team LinkedIn CSVs and build connection index |
 | scan-resumption | `.claude/agents/scan-resumption.md` | Copy previous scan files and set iteration baseline |
 | citation-watchdog | `.claude/agents/citation-watchdog.md` | Real-time fabrication detection |
 | delta-summarizer | `.claude/agents/delta-summarizer.md` | Compares first draft to final report (iterative and resume modes) |

@@ -19,6 +19,8 @@ Read these files from `/tmp/gapscout-<scan-id>/`:
 - `competitor-trust-scores.json` — competitor trust scores (if exists)
 - `scan-audit.json` — scan audit results (if exists)
 - `deep-research-summary.json` — deep research verification results (if exists)
+- `connection-index.json` — team LinkedIn connection index with network reach data (if exists)
+- `community-validation.json` — community validation with network outreach suggestions (if exists)
 - `delta-summary.json` — delta comparison with previous scan (if exists, resume mode only)
 
 ## Task
@@ -54,6 +56,7 @@ The HTML report MUST include a sticky/fixed Table of Contents for navigation. Th
     <li><a href="#consolidation-forecast">Consolidation Forecast</a></li>
     <li><a href="#founder-profiles">Founder Profiles</a></li>
     <li><a href="#community-validation">Community Validation</a></li>
+    <li><a href="#network-reach">Network Reach</a></li>
     <li><a href="#data-quality">Data Quality</a></li>
     <li><a href="#citation-index">Citation Index</a></li>
   </ol>
@@ -183,6 +186,32 @@ Generate a self-contained HTML report from report.json:
      - Collapsible recent threads section with links
      - Validation plan in a styled card with: survey question in a callout box, engagement template in a copyable `<pre>` block, "What to look for" as green checkmark list, "Red flags" as red X list
      - Cross-cutting communities section at bottom showing communities that span multiple opportunities
+   - **Network Reach** (if report.json has networkReach that is not null):
+
+### Network Reach Section
+
+If `connection-index.json` exists and has connections, render a Network Reach section:
+
+**Section header:** "Network Reach — Your Team's Connections"
+
+**Per opportunity:**
+- Show a card/box for each opportunity with relevant connections
+- List top 5 most relevant connections per opportunity
+- For each connection: name, company, position, connected via [team member(s)], match type badge
+- Suggested outreach question in italics
+- "Warm intro via [team member]" tag
+
+**Summary stats at the top:**
+- Total team connections indexed: {N} across {M} team members
+- Connections at competitor companies: {N}
+- Connections matching target personas: {N}
+- Opportunities with network coverage: {N}/{total}
+
+**Privacy:** Never display email addresses in the HTML report. Show names and companies only.
+
+If connection-index.json does not exist, render a placeholder:
+"Upload your team's LinkedIn connections to enable network-based outreach suggestions. See: linkedin.com/help/linkedin/answer/a566336"
+
    - **Scan Audit** (if scan-audit.json exists): Per-source data integrity table with PASS(green)/WARN(yellow)/FAIL(red) badges, post count discrepancies, provenance issues, query coverage gaps
    - **Data Quality**: QA scores table
    - **References (Bibliography)**: Numbered bibliography section at bottom of report. Each entry formatted as:

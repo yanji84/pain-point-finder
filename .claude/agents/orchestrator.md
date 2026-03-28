@@ -105,6 +105,10 @@ You (orchestrator)
 │   └── trust-scorer (4 dimension sub-agents)
 │   Output: competitor-trust-scores.json
 │
+│   ├── Phase 2c: TEAM CONNECTION INDEXING (optional)
+│   │   └── connection-indexer (parses LinkedIn CSVs)
+│   │   Output: connection-index.json
+│
 ├── Phase 3: SCANNING (all sources — they run in parallel, no time savings from cutting)
 │   ├── Category A: 6 coordinators (each spawns batch sub-agents)
 │   ├── Category B: 6 single scanners
@@ -353,6 +357,10 @@ Save your orchestration config to `/tmp/gapscout-<scan-id>/orchestration-config.
       "topNOpportunities": 5,
       "convergenceThreshold": 5,
       "maxSearchesPerOpportunity": 10
+    },
+    "teamConnections": {
+      "enabled": true,
+      "directoryPath": "team-connections/"
     }
   },
   "rateBudget": {
@@ -446,9 +454,43 @@ Read `{scan_dir}/competitor-trust-scores.json`. Log trust tier distribution.
 
 **Decision point**: If >50% of "core" tier competitors are SUSPECT or UNVERIFIED, log a warning — the competitive landscape may be inflated by vaporware. Note this in the orchestration log for synthesis agents to reference.
 
-After trust scoring completes, start discovery QA:
+After trust scoring completes, start connection indexing:
 ```
 TaskUpdate({ id: trust_scoring_task_id, status: "completed" })
+```
+
+### Step 2c: Index Team LinkedIn Connections (Optional)
+
+Check if `/tmp/gapscout-<scan-id>/team-connections/` directory exists and contains CSV files.
+
+IF directory exists and has .csv files:
+  ```
+  TaskCreate({ description: "Phase 2c: Indexing team LinkedIn connections", status: "in_progress" })
+  ```
+  Save the returned task ID as `connection_indexing_task_id`.
+
+  Agent({
+    description: "Index team LinkedIn connections",
+    subagent_type: "connection-indexer",
+    prompt: "Parse and index all LinkedIn CSVs in {scan_dir}/team-connections/. Enrich with competitor matches from competitor-map.json. Scan dir: {scan_dir}",
+    run_in_background: false
+  })
+
+  Wait for: connection-indexer-COMPLETE.txt
+  Read connection-index.json. Log:
+  - "Team connections indexed: {totalConnections} from {teamMembers.length} team members"
+  - "Competitor coverage: {N} connections at competitor companies"
+
+  ```
+  TaskUpdate({ id: connection_indexing_task_id, status: "completed" })
+  ```
+
+ELSE:
+  Log: "No team-connections directory found. Skipping LinkedIn connection indexing."
+  Write empty connection-index: { "connections": [], "indexes": {}, "networkReach": null }
+
+After connection indexing resolves, start discovery QA:
+```
 TaskCreate({ description: "Phase 2-QA: Evaluating discovery quality", status: "in_progress" })
 ```
 Save the returned task ID as `discovery_qa_task_id`.
@@ -677,6 +719,7 @@ Spawn **`synthesizer-coordinator`** with:
 - scan-spec.json (with sprint contracts)
 - List of degraded/missing sources (so synthesis knows what to expect)
 - scan-audit.json — data integrity audit results (if exists). Sources with FAIL verdicts should have their evidence weighted lower.
+- connection-index.json — team LinkedIn connection index (if exists). Sprint 12 (community validation) uses this for outreach suggestions.
 
 **IMPORTANT: Trust Score Integration.** Include in the synthesizer-coordinator prompt:
 > Read `{scan_dir}/competitor-trust-scores.json`. Pass each competitor's trustTier to sprint sub-agents. Instruct them:
@@ -947,6 +990,7 @@ Pass to the synthesizer-coordinator:
 - scan-audit.json
 - competitor-trust-scores.json
 - watchdog-blocklist.json
+- connection-index.json — team LinkedIn connection index (if exists)
 - **Explicit instruction**: "Only run sprints listed in `iterativeMode.leanSynthesisSprints`. After Sprint 6 completes, write stage-complete-synthesis.json and STOP. Do NOT run deferred sprints."
 
 Wait for: `{scan_dir}/stage-complete-synthesis.json`
@@ -1305,6 +1349,13 @@ IF fresh scan:
   - Citations added per iteration
   - Opportunities promoted/demoted
 
+### Team Network
+IF connection-index.json has connections:
+- Connections indexed: {N} from {M} team members
+- Competitor coverage: {N} connections at {M} competitor companies
+- Persona matches: {N} connections matching target personas
+- See report for specific outreach suggestions
+
 ### Deliverables
 - Web report: /tmp/gapscout-{id}/report.html
 - JSON data: /tmp/gapscout-{id}/report.json
@@ -1335,6 +1386,7 @@ All report generators receive:
 - `deep-research-verification-round-{N}.json` — per-round detail files (for evidence drill-down)
 - `competitor-trust-scores.json` — competitor legitimacy scores (from Phase 2b)
 - `community-validation.json` — community validation suggestions (from Sprint 12, MANDATORY)
+- `connection-index.json` — team LinkedIn connection index (from Phase 2c, if exists)
 - `citation-links-opportunities.json` — verified opportunity evidence URLs (from Step 7.5, MANDATORY)
 - `citation-links-competitors.json` — verified competitor and founder URLs (from Step 7.5, MANDATORY)
 - `citation-links-pain-themes.json` — verified pain theme evidence URLs (from Step 7.5, MANDATORY)
@@ -1378,6 +1430,13 @@ Compile and present:
 - JSON data: /tmp/gapscout-{id}/report.json
 - Issues log: /tmp/gapscout-{id}/gapscout-issues-{id}.md
 - Competitor profiles: /tmp/gapscout-{id}/competitor-profiles.json
+
+### Team Network
+IF connection-index.json has connections:
+- Connections indexed: {N} from {M} team members
+- Competitor coverage: {N} connections at {M} competitor companies
+- Persona matches: {N} connections matching target personas
+- See report for specific outreach suggestions
 
 ### Data Quality Notes
 {any degraded sources, skipped agents, or unresolved QA issues}

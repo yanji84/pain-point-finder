@@ -21,6 +21,7 @@ Read from `/tmp/gapscout-<scan-id>/`:
 - `synthesis-1-competitive-map.json` — competitor landscape
 - `synthesis-4-switching.json` — where people are switching (communities where switchers congregate)
 - `deep-research-summary.json` — verification results (if exists)
+- `connection-index.json` — team LinkedIn connection index (if exists — team members may not have uploaded CSVs)
 
 ## Task
 
@@ -65,6 +66,46 @@ Use WebSearch to find real, active communities where the target persona congrega
 - LinkedIn groups
 - Stack Overflow tags (for developer tools)
 - YouTube channels with active comment sections about the problem
+
+### Team Network (LinkedIn Connections)
+
+If `connection-index.json` exists and has connections:
+
+For each top opportunity, cross-reference the connection index:
+
+**Competitor Connections:**
+- Find connections who work at competitor companies identified in the opportunity analysis
+- These people can provide insider perspective on competitor weaknesses
+- Prioritize connections with `sharedConnections >= 2` (known by multiple team members = warmer intro)
+
+**Persona Matches:**
+- Find connections whose title matches the target persona for this opportunity
+- These people can validate whether the pain point is real and whether they'd pay
+- Look at `matchedPersonas` in the connection index for pre-computed matches
+
+**Industry Connections:**
+- Find connections at companies in the same industry/market segment
+- These people can validate market sizing and willingness-to-pay
+
+**For each matched connection, generate an outreach suggestion:**
+```json
+{
+  "connectionName": "Jane Doe",
+  "company": "Acme Corp",
+  "position": "VP of Product",
+  "connectedVia": ["mike", "sarah"],
+  "sharedConnections": 2,
+  "matchType": "persona_match|competitor_employee|industry_peer",
+  "relevanceToOpportunity": "Title matches target persona 'product leader'; company is a Competitor A customer experiencing the identified pain",
+  "suggestedOutreach": "Ask about their experience with [pain point]. Specifically: Do they experience [specific pain]? How do they currently solve it? Would they pay for [proposed solution]?",
+  "introPath": "Sarah has the strongest connection (connected since 2022)"
+}
+```
+
+**Privacy rules:**
+- Only suggest outreach to connections where the team member has explicitly uploaded their CSV (implicit consent)
+- Never include email addresses in the validation plan — the team member who knows the person handles the actual outreach
+- Frame suggestions as "warm intro via [team member]", not cold outreach
 
 ### 2. Generate Validation Scripts
 
@@ -127,6 +168,23 @@ Write to: `/tmp/gapscout-<scan-id>/community-validation.json`
         "redFlags": ["Responses like 'nobody cares about this'", "Feature already exists in competitor X", "Low engagement despite large community"],
         "estimatedTimeToValidate": "1-2 weeks",
         "minimumResponses": 15
+      },
+      "networkOutreach": {
+        "totalMatches": "N",
+        "connections": [
+          {
+            "name": "Jane Doe",
+            "company": "Acme Corp",
+            "position": "VP of Product",
+            "connectedVia": ["mike", "sarah"],
+            "sharedConnections": 2,
+            "matchType": "persona_match",
+            "relevanceToOpportunity": "<why this person is relevant>",
+            "suggestedOutreach": "<what to ask them>",
+            "introPath": "<who should make the intro>"
+          }
+        ],
+        "teamMembersWithRelevantConnections": ["mike", "sarah"]
       }
     }
   ],
@@ -141,6 +199,8 @@ Write to: `/tmp/gapscout-<scan-id>/community-validation.json`
   ]
 }
 ```
+
+**Note:** If `connection-index.json` does not exist or is empty, set `networkOutreach` to `null` and note: "No team LinkedIn connections uploaded. Upload CSVs to `/tmp/gapscout-<id>/team-connections/` to enable network-based outreach suggestions."
 
 ## Rules
 

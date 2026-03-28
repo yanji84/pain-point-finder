@@ -701,6 +701,17 @@ iteration-journal  [LEAF — no sub-agents]
 
 **Sub-agents: 0 (leaf agent)**
 
+### 2V. Connection-Indexer
+
+```
+connection-indexer  [LEAF — no sub-agents]
+  Reads: team-connections/*.csv, competitor-map.json, synthesis-6-opportunities.json
+  Runs: node scripts/parse-linkedin-csv.mjs
+  Writes: connection-index.json + connection-indexer-COMPLETE.txt
+```
+
+**Sub-agents: 0 (leaf agent)**
+
 ### Iterative Loop Data Flow
 
 ```
@@ -744,6 +755,7 @@ Per iteration:
 | `/tmp/gapscout-competitor-map-final.json` | profile-scraper | scanners, synthesizer | Discovery |
 | `/tmp/gapscout-subreddits.json` | subreddit-discoverer | reddit scanners, broaden-reddit agents | Discovery |
 | `/tmp/gapscout-queries.json` | query-generator | all scanners, websearch-coordinator | Discovery |
+| `connection-index.json` | connection-indexer | community-validator, report-generator-json, report-generator-html | Discovery (Phase 2c) |
 | `stage-complete-discovery.json` | team lead | judge-discovery, next stage agents | Discovery |
 
 ### 3C. Scanning Stage Files
@@ -1104,7 +1116,8 @@ When a judge returns `blockerForNextStage: true`:
 | | subreddit sub-agents | 4 | parallel |
 | | query-generator | 1 | coordinator |
 | | query sub-agents | 4 | parallel (30 competitors > 15) |
-| | **Subtotal** | **25** | |
+| | connection-indexer | 1 | optional — only if team LinkedIn CSVs provided |
+| | **Subtotal** | **25-26** | +1 if LinkedIn connections provided |
 | **QA: Discovery** | judge-discovery | 1 | |
 | | eval-<source> sub-agents | 6 | 4 discovery outputs + 2 validators |
 | | documenter-discovery | 1 | |
@@ -1238,6 +1251,7 @@ If judge iteration loops trigger (assume 1 round of re-runs):
 | loop-controller | `.claude/agents/loop-controller.md` | Convergence manager for iterative loop |
 | strategic-reviewer | `.claude/agents/strategic-reviewer.md` | CEO/founder-mode strategic review per opportunity |
 | iteration-journal | `.claude/agents/iteration-journal.md` | Human-readable iteration history journal |
+| connection-indexer | `.claude/agents/connection-indexer.md` | Parse team LinkedIn CSVs and build connection index |
 | scan-resumption | `.claude/agents/scan-resumption.md` | Copy previous scan files and set iteration baseline |
 | delta-summarizer | `.claude/agents/delta-summarizer.md` | Compares first draft to final report (iterative and resume modes) |
 | All other agents | Defined inline in `GAPSCOUT-WORKFLOW.md` | Scanner coordinators, discovery agents, etc. |
