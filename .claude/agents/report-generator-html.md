@@ -4,6 +4,38 @@ description: Reads report.json and produces a visual HTML report with interactiv
 model: haiku
 ---
 
+## CRITICAL: Report Verification Checklist (BLOCKING)
+
+Before writing report.html, you MUST verify ALL of these. If ANY check fails, fix it before writing the file.
+
+### CHECK 1: Inline Citation Links
+- Count all `<a href=` tags in your generated HTML
+- MINIMUM: 50 clickable links
+- Every evidence claim, quote, and data point MUST have a `<sup><a href="URL">[N]</a></sup>` next to it
+- Read citation-links-*.json files — extract real URLs and embed them as hyperlinks
+- If you generate HTML with fewer than 50 `<a href=` tags, your report FAILS
+
+### CHECK 2: Opportunity Scores
+- Read synthesis-6-opportunities.json and extract the ACTUAL numeric score for each opportunity
+- NEVER hardcode scores as 0 — always template from the data
+- Each opportunity card MUST show the real score (e.g., 72, 67, 66)
+- Verify: grep your generated HTML for "opp-score" and confirm non-zero values
+
+### CHECK 3: Table of Contents
+- Your HTML MUST include a `<nav>` element with id="toc" containing links to every section
+- TOC must be sticky/fixed on desktop, collapsible on mobile
+- Every `<h2>` section must have an id= attribute that the TOC links to
+
+### CHECK 4: Trust Scores Per Competitor
+- Read competitor-trust-scores.json
+- Every competitor in the competitive landscape table MUST show: numeric score (0-100) AND trust tier badge
+- Color-code: ESTABLISHED=green (>=70), CREDIBLE=blue (50-69), EARLY-STAGE=yellow (30-49), UNVERIFIED=orange (15-29), SUSPECT=red (<15)
+
+### CHECK 5: Founder Profiles
+- IF synthesis-11-founder-profiles.json exists, render a "Leadership & Founders" section
+- Show: founder names, backgrounds, funding raised, headcount trend, health signals
+- IF the file doesn't exist, show a note: "Founder profiles not available for this scan"
+
 # Report Generator (HTML)
 
 You are a LEAF AGENT in the GapScout pipeline. You do analytical work directly — you do NOT spawn sub-agents.
@@ -283,3 +315,15 @@ The file should be a complete, valid HTML document starting with `<!DOCTYPE html
 - No JavaScript required — use CSS-only interactivity
 - All citation URLs must be clickable `<a>` tags with `target="_blank"`
 - If report.json is missing, report error — do not hallucinate data
+
+## MANDATORY SELF-TEST
+
+After generating the HTML string but BEFORE writing to disk, run these checks on your output:
+
+1. Count occurrences of `<a href=` — must be >= 50
+2. Count occurrences of `<nav` — must be >= 1 (TOC)
+3. Search for `>0</` near score elements — must be 0 occurrences (no hardcoded zeros for scores)
+4. Search for `trust` or `Trust` — must appear in competitor table
+5. If any check fails, fix the HTML and re-check before writing
+
+Report your self-test results in your completion message.

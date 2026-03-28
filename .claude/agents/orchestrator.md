@@ -123,15 +123,16 @@ You (orchestrator)
 │
 │   ┌─── IF iterativeMode.enabled (DEFAULT) ───────────────────────────┐
 │   │                                                                   │
-│   ├── Phase 4-LEAN: LEAN SYNTHESIS (6 core sprints only)             │
+│   ├── Phase 4-LEAN: LEAN SYNTHESIS (7 core sprints)                  │
 │   │   └── synthesizer-coordinator (lean mode)                         │
 │   │       ├── Sprint 1: 3 sub-agents (competitive map)               │
 │   │       ├── Sprint 2: 3 sub-agents (competitor pain)               │
 │   │       ├── Sprint 3: 3 sub-agents (unmet needs)                   │
 │   │       ├── Sprint 4: 1 agent (switching signals)                  │
 │   │       ├── Sprint 5: 3 sub-agents (gap matrix)                    │
-│   │       └── Sprint 6: 2 sub-agents (scoring + ranking)             │
-│   │   Output: 6 synthesis files                                       │
+│   │       ├── Sprint 6: 2 sub-agents (scoring + ranking)             │
+│   │       └── Sprint 11: 2 sub-agents (founder profiles)             │
+│   │   Output: 7 synthesis files                                       │
 │   │                                                                   │
 │   ├── Phase 5-LEAN: LEAN CITATION VERIFICATION                       │
 │   │   └── 5 parallel citation verifiers                               │
@@ -338,8 +339,8 @@ Save your orchestration config to `/tmp/gapscout-<scan-id>/orchestration-config.
     "iterativeMode": {
       "enabled": true,
       "maxOuterIterations": 3,
-      "leanSynthesisSprints": [1, 2, 3, 4, 5, 6],
-      "deferredSprints": [7, 8, 9, 10, 11, 12, 13, 14, 15],
+      "leanSynthesisSprints": [1, 2, 3, 4, 5, 6, 11],
+      "deferredSprints": [7, 8, 9, 10, 12, 13, 14, 15],
       "convergenceThresholds": {
         "critiqueScoreStop": 25,
         "maxScoreChangeStop": 5,
@@ -970,7 +971,9 @@ IF orchestration-config.agentConfig.iterativeMode.enabled == false:
 
 ## ITERATIVE DRAFT MODE (Steps 8-LEAN through 8-LOOP)
 
-### Step 8-LEAN-SYNTH: Lean Synthesis (6 Core Sprints)
+### Step 8-LEAN-SYNTH: Lean Synthesis (7 Core Sprints)
+
+Sprint 11 (founder profiles) is MANDATORY in lean mode — founder/leadership data is required for every report.
 
 Skip the scanning QA checkpoint — the outer loop's critique phase replaces it with more targeted feedback.
 
@@ -978,9 +981,9 @@ Spawn **`synthesizer-coordinator`** with lean mode:
 
 ```
 Agent({
-  description: "Lean synthesis — 6 core sprints",
+  description: "Lean synthesis — 7 core sprints",
   subagent_type: "synthesizer-coordinator",
-  prompt: "Run LEAN synthesis mode. Only run sprints: 1 (competitive map), 2 (competitor pain), 3 (unmet needs), 4 (switching signals), 5 (gap matrix), 6 (scoring + ranking). SKIP sprints 7-15 — they will be pulled in by the iterative refinement loop if needed. Scan dir: {scan_dir}",
+  prompt: "Run LEAN synthesis mode. Only run sprints: 1 (competitive map), 2 (competitor pain), 3 (unmet needs), 4 (switching signals), 5 (gap matrix), 6 (scoring + ranking), 11 (founder profiles). SKIP sprints 7-10, 12-15 — they will be pulled in by the iterative refinement loop if needed. Scan dir: {scan_dir}",
   run_in_background: false
 })
 ```
@@ -993,12 +996,12 @@ Pass to the synthesizer-coordinator:
 - competitor-trust-scores.json
 - watchdog-blocklist.json
 - connection-index.json — team LinkedIn connection index (if exists)
-- **Explicit instruction**: "Only run sprints listed in `iterativeMode.leanSynthesisSprints`. After Sprint 6 completes, write stage-complete-synthesis.json and STOP. Do NOT run deferred sprints."
+- **Explicit instruction**: "Only run sprints listed in `iterativeMode.leanSynthesisSprints`. After Sprint 11 completes, write stage-complete-synthesis.json and STOP. Do NOT run deferred sprints."
 
 Wait for: `{scan_dir}/stage-complete-synthesis.json`
 
 ```
-TaskUpdate({ id: synthesis_task_id, description: "Phase 4-LEAN: Lean synthesis complete (6/6 core sprints)", status: "completed" })
+TaskUpdate({ id: synthesis_task_id, description: "Phase 4-LEAN: Lean synthesis complete (7/7 core sprints)", status: "completed" })
 TaskCreate({ description: "Phase 5-LEAN: Verifying citations for draft report", status: "in_progress" })
 ```
 Save the returned task ID as `citation_task_id`.
@@ -1025,7 +1028,7 @@ Spawn report generators (JSON + HTML only, skip summary presenter for now):
 Agent({
   description: "Generate draft report JSON",
   subagent_type: "report-generator-json",
-  prompt: "Generate draft v1 report. Note: this is a lean draft with 6 synthesis sprints. Sprints 7-15 were deferred. Mark report as 'draft_iteration: 1'. Scan dir: {scan_dir}",
+  prompt: "Generate draft v1 report. Note: this is a lean draft with 7 synthesis sprints (1-6 + 11). Sprints 7-10, 12-15 were deferred. Mark report as 'draft_iteration: 1'. Scan dir: {scan_dir}",
   run_in_background: true
 })
 
@@ -1532,7 +1535,7 @@ Throughout the pipeline, you continuously adapt based on results:
 - **Adapt the plan.** The initial scan-spec is a starting point, not a contract. Adjust based on runtime results.
 - **Don't over-retry.** Max 2 retries per stage, max 3 synthesis iterations (full mode), max 3 outer iterations (iterative mode). Ship imperfect data rather than looping forever.
 - **Citations expand every iteration.** In iterative mode, verify that citation count strictly increases each iteration. If it doesn't, the iteration added no value — flag this to the loop-controller.
-- **Deferred sprints are demand-driven.** In lean mode, sprints 7-15 are not lost — they get pulled in when the report-critic identifies a specific need. Sprint 8 (signal strength) gets pulled when evidence quality is questioned. Sprint 9 (counter-positioning) gets pulled when debates reveal competitive uncertainty. Sprint 11 (founder profiles) gets pulled when critic identifies leadership as a gap.
+- **Deferred sprints are demand-driven.** In lean mode, sprints 7-10 and 12-15 are not lost — they get pulled in when the report-critic identifies a specific need. Sprint 8 (signal strength) gets pulled when evidence quality is questioned. Sprint 9 (counter-positioning) gets pulled when debates reveal competitive uncertainty. Sprint 11 (founder profiles) is always included in the lean set — it is never deferred.
 - **Each draft is a complete report.** Every iteration produces a full report.json + report.html. The user can inspect any intermediate draft.
 - **Track everything.** Write orchestration decisions to `/tmp/gapscout-<scan-id>/orchestrator-log.jsonl` — one line per decision with timestamp, reason, and outcome.
 - **Be transparent.** When you skip agents, degrade quality, or override the plan, note it in the final presentation.

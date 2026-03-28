@@ -275,7 +275,7 @@ export function getConnectionStats(db) {
   `).all();
 
   const total = db.prepare('SELECT COUNT(*) as total FROM team_connections').get();
-  const uniqueCompanies = db.prepare('SELECT COUNT(DISTINCT company_normalized) as count FROM team_connections WHERE company_normalized != ""').get();
+  const uniqueCompanies = db.prepare("SELECT COUNT(DISTINCT company_normalized) as count FROM team_connections WHERE company_normalized != ''").get();
 
   return {
     members,
