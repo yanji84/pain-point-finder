@@ -461,6 +461,8 @@ TaskUpdate({ id: trust_scoring_task_id, status: "completed" })
 
 ### Step 2c: Index Team LinkedIn Connections (Optional)
 
+In the web service deployment, team connections are stored persistently in the database and auto-exported to the scan directory when a scan starts. The connection-indexer agent reads CSVs from `{scan_dir}/team-connections/` regardless of whether they were manually placed or auto-exported.
+
 Check if `/tmp/gapscout-<scan-id>/team-connections/` directory exists and contains CSV files.
 
 IF directory exists and has .csv files:

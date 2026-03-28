@@ -9,20 +9,21 @@
 
 import express from 'express';
 import crypto from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { initDb, createUser, getUserByUsername, createSession, deleteSession, listScans as dbListScans, cleanExpiredSessions, createScan as dbCreateScan, getScan } from './db.mjs';
+import { initDb, createUser, getUserByUsername, createSession, deleteSession, listScans as dbListScans, cleanExpiredSessions, createScan as dbCreateScan, getScan, getConnectionStats, getConnectionMembers, exportConnectionsForScan } from './db.mjs';
 import { authMiddleware, hashPassword, verifyPassword, generateSessionId, SESSION_MAX_AGE_MS } from './auth.mjs';
 import { cleanupStale, getActiveCount, getQueueLength, startScan, checkProgress } from './scanner.mjs';
 import { createScansRouter } from './routes/scans.mjs';
 import { createReportsRouter } from './routes/reports.mjs';
 import { createChatRouter } from './routes/chat.mjs';
+import { createConnectionsRouter } from './routes/connections.mjs';
 import { rateLimiter, securityHeaders, requestSizeLimiter, loginRateLimiter } from './middleware/security.mjs';
 import {
   renderLogin, renderDashboard, renderNewScan, renderScanDetail,
-  renderSettings,
+  renderSettings, renderConnections,
 } from './views.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -130,6 +131,7 @@ app.use(authMiddleware(db));
 app.use('/api', createChatRouter(db, DATA_DIR));  // Chat routes first (more specific: /scans/:id/chat)
 app.use('/api/scans', rateLimiter({ windowMs: 60000, max: 10, keyFn: req => req.user?.id || req.ip }), createScansRouter(db, DATA_DIR));
 app.use('/api/reports', createReportsRouter(db, DATA_DIR));
+app.use('/api/connections', createConnectionsRouter(db));
 
 // ─── Page routes ────────────────────────────────────────────────────────────
 
@@ -161,6 +163,25 @@ app.post('/scans', (req, res) => {
   const id = crypto.randomUUID();
   const scanDir = resolve(DATA_DIR, 'scans', id);
   mkdirSync(scanDir, { recursive: true });
+
+  // Auto-export team connections to scan directory
+  const connMembers = getConnectionMembers(db);
+  if (connMembers.length > 0) {
+    const connDir = resolve(scanDir, 'team-connections');
+    mkdirSync(connDir, { recursive: true });
+    for (const memberName of connMembers) {
+      const rows = exportConnectionsForScan(db, memberName);
+      if (rows.length > 0) {
+        const header = 'First Name,Last Name,Email Address,Company,Position,Connected On';
+        const csvLines = rows.map(r =>
+          [r.first_name, r.last_name, r.email, r.company, r.position, r.connected_on]
+            .map(v => `"${(v || '').replace(/"/g, '""')}"`)
+            .join(',')
+        );
+        writeFileSync(resolve(connDir, `${memberName}.csv`), header + '\n' + csvLines.join('\n') + '\n', 'utf8');
+      }
+    }
+  }
 
   dbCreateScan(db, {
     id,
@@ -244,6 +265,13 @@ app.post('/settings/password', async (req, res) => {
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.user.id);
 
   res.type('html').send(renderSettings(users, req.user, { message: 'Password updated.', basePath: BASE_PATH }));
+});
+
+// ─── Connections routes ──────────────────────────────────────────────────────
+
+app.get('/connections', (req, res) => {
+  const stats = getConnectionStats(db);
+  res.type('html').send(renderConnections(stats, { user: req.user, basePath: BASE_PATH }));
 });
 
 // ─── Start server ───────────────────────────────────────────────────────────

@@ -16,21 +16,20 @@ Examples:
 
 ## Team LinkedIn Connections (Optional)
 
-Upload your team's LinkedIn connections to get personalized outreach suggestions in the report. Each team member exports their connections from LinkedIn ([instructions](https://www.linkedin.com/help/linkedin/answer/a566336)) and places the CSV in the scan directory:
+Upload your team's LinkedIn connections via the web UI for personalized outreach suggestions in every report.
 
-```bash
-mkdir -p /tmp/gapscout-<scan-id>/team-connections/
-cp ~/Downloads/Connections.csv /tmp/gapscout-<scan-id>/team-connections/mike.csv
-cp ~/Downloads/Connections.csv /tmp/gapscout-<scan-id>/team-connections/sarah.csv
-```
+1. Export your connections from LinkedIn ([instructions](https://www.linkedin.com/help/linkedin/answer/a566336))
+2. Log in to GapScout → click **Connections** in the nav bar
+3. Enter your name and upload the CSV
+4. Repeat for each team member
 
-The pipeline will:
+Connections are stored persistently — upload once, every scan uses them automatically. The pipeline will:
+- Auto-export team connections to each new scan directory
 - Parse and merge all team members' connections
 - Match connections to competitor companies and target personas
 - Generate "Network Reach" sections in the report with specific outreach suggestions
-- Attribute each connection to the team member(s) who know them
 
-Privacy: Connection data is processed locally only. Names/emails never sent to external APIs.
+Privacy: Connection data stored in the local SQLite database only. Never sent to external APIs.
 
 ## Architecture
 

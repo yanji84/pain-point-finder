@@ -59,6 +59,23 @@ export function initDb(dataDir) {
       content TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS team_connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      member_name TEXT NOT NULL,
+      first_name TEXT,
+      last_name TEXT,
+      email TEXT,
+      company TEXT,
+      company_normalized TEXT,
+      position TEXT,
+      connected_on TEXT,
+      uploaded_by_user_id TEXT REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_connections_member ON team_connections(member_name);
+    CREATE INDEX IF NOT EXISTS idx_connections_company ON team_connections(company_normalized);
   `);
 
   return db;
@@ -220,4 +237,67 @@ export function getChatMessages(db, sessionId, limit = 100) {
     ORDER BY cm.created_at ASC
     LIMIT ?
   `).all(sessionId, limit);
+}
+
+export function upsertConnections(db, memberName, connections, userId) {
+  db.prepare('DELETE FROM team_connections WHERE member_name = ?').run(memberName);
+
+  const stmt = db.prepare(`
+    INSERT INTO team_connections (member_name, first_name, last_name, email, company, company_normalized, position, connected_on, uploaded_by_user_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const insertMany = db.transaction((rows) => {
+    for (const r of rows) {
+      stmt.run(
+        memberName,
+        r.firstName || null,
+        r.lastName || null,
+        r.email || null,
+        r.company || null,
+        (r.company || '').toLowerCase().trim(),
+        r.position || null,
+        r.connectedOn || null,
+        userId
+      );
+    }
+  });
+
+  insertMany(connections);
+}
+
+export function getConnectionStats(db) {
+  const members = db.prepare(`
+    SELECT member_name, COUNT(*) as count, MAX(created_at) as last_upload
+    FROM team_connections
+    GROUP BY member_name
+    ORDER BY member_name
+  `).all();
+
+  const total = db.prepare('SELECT COUNT(*) as total FROM team_connections').get();
+  const uniqueCompanies = db.prepare('SELECT COUNT(DISTINCT company_normalized) as count FROM team_connections WHERE company_normalized != ""').get();
+
+  return {
+    members,
+    totalConnections: total.total,
+    uniqueCompanies: uniqueCompanies.count
+  };
+}
+
+export function deleteConnectionsByMember(db, memberName) {
+  db.prepare('DELETE FROM team_connections WHERE member_name = ?').run(memberName);
+}
+
+export function getAllConnections(db) {
+  return db.prepare('SELECT * FROM team_connections ORDER BY member_name, last_name, first_name').all();
+}
+
+export function exportConnectionsForScan(db, memberName) {
+  return db.prepare(
+    'SELECT first_name, last_name, email, company, position, connected_on FROM team_connections WHERE member_name = ? ORDER BY last_name, first_name'
+  ).all(memberName);
+}
+
+export function getConnectionMembers(db) {
+  return db.prepare('SELECT DISTINCT member_name FROM team_connections ORDER BY member_name').all().map(r => r.member_name);
 }

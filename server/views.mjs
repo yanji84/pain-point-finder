@@ -568,6 +568,7 @@ export function renderLayout(title, bodyHtml, { user, scripts, basePath = '' } =
   <nav class="nav">
     <a href="${basePath}/" class="nav-brand">GapScout</a>
     <div class="nav-right">
+      <a href="${basePath}/connections" class="btn-ghost" style="margin-right:4px">Connections</a>
       <a href="${basePath}/settings" class="btn-ghost" style="margin-right:4px">Settings</a>
       <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">&#9788;</button>
 ${user ? `      <span class="nav-user">${esc(user.username)}</span>
@@ -1253,4 +1254,115 @@ ${error ? `  <div class="alert alert-error">${esc(error)}</div>` : ''}
 </div>`;
 
   return renderLayout('Settings', body, { user: currentUser, basePath });
+}
+
+// ─── Connections ──────────────────────────────────────────────────────────────
+
+export function renderConnections(stats, { user, message, error, basePath = '' } = {}) {
+  const { members = [], totalConnections = 0, uniqueCompanies = 0 } = stats || {};
+
+  const memberRows = members.map(m => `
+    <tr>
+      <td>${esc(m.member_name)}</td>
+      <td>${m.count.toLocaleString()}</td>
+      <td>${fmtDate(m.last_upload)}</td>
+      <td>
+        <button class="btn btn-sm btn-danger" onclick="deleteMember('${esc(m.member_name)}')">Delete</button>
+      </td>
+    </tr>`).join('');
+
+  const statsBar = members.length > 0 ? `
+  <div class="stats-row" style="margin-bottom:24px">
+    <div class="stat">Total connections: <strong>${totalConnections.toLocaleString()}</strong></div>
+    <div class="stat">Team members: <strong>${members.length}</strong></div>
+    <div class="stat">Unique companies: <strong>${uniqueCompanies.toLocaleString()}</strong></div>
+  </div>` : '';
+
+  const membersTable = members.length > 0 ? `
+  <div class="section">
+    <div class="section-title">Team Members</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Connections</th><th>Last Upload</th><th>Actions</th></tr>
+        </thead>
+        <tbody>${memberRows}</tbody>
+      </table>
+    </div>
+  </div>` : `
+  <div class="section">
+    <div class="card" style="text-align:center;padding:40px 20px">
+      <p style="color:var(--fg-muted);font-size:13px">No connections uploaded yet. Upload your team's LinkedIn connections to get personalized outreach suggestions in scan reports.</p>
+    </div>
+  </div>`;
+
+  const body = `
+<div class="container" style="max-width:720px">
+  <a href="${basePath}/" class="back-link">&larr; Dashboard</a>
+  <div class="page-header">
+    <h1>Team Connections</h1>
+    <p class="subtitle">Upload LinkedIn connections for network-based outreach suggestions in reports.</p>
+  </div>
+
+${message ? `  <div class="alert alert-success">${esc(message)}</div>` : ''}
+${error ? `  <div class="alert alert-error">${esc(error)}</div>` : ''}
+
+${statsBar}
+
+  <div class="section">
+    <div class="section-title">Upload Connections</div>
+    <div class="card">
+      <div id="upload-msg"></div>
+      <div class="form-group">
+        <label for="member-name">Team member name</label>
+        <input type="text" id="member-name" placeholder="e.g., mike" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="csv-file">LinkedIn CSV file</label>
+        <input type="file" id="csv-file" accept=".csv">
+      </div>
+      <button class="btn btn-primary" id="upload-btn">Upload</button>
+      <p style="color:var(--fg-muted);font-size:12px;margin-top:12px">
+        Export from LinkedIn: Settings &rarr; Data Privacy &rarr; Get a copy of your data &rarr; Connections.
+        <a href="https://www.linkedin.com/help/linkedin/answer/a566336" target="_blank" rel="noopener">Learn more</a>
+      </p>
+    </div>
+  </div>
+
+${membersTable}
+</div>`;
+
+  const scripts = `
+document.getElementById('upload-btn').addEventListener('click', function() {
+  var nameInput = document.getElementById('member-name');
+  var fileInput = document.getElementById('csv-file');
+  var msgEl = document.getElementById('upload-msg');
+  var memberName = nameInput.value.trim();
+  if (!memberName) { msgEl.innerHTML = '<div class="alert alert-error">Please enter a team member name.</div>'; return; }
+  if (!fileInput.files.length) { msgEl.innerHTML = '<div class="alert alert-error">Please select a CSV file.</div>'; return; }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    fetch('${basePath}/api/connections/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberName: memberName, csvContent: e.target.result })
+    }).then(function(r) { return r.json(); }).then(function(data) {
+      if (data.error) { msgEl.innerHTML = '<div class="alert alert-error">' + data.error + '</div>'; }
+      else { msgEl.innerHTML = '<div class="alert alert-success">' + (data.message || 'Upload successful') + '</div>'; setTimeout(function() { location.reload(); }, 1000); }
+    }).catch(function(err) { msgEl.innerHTML = '<div class="alert alert-error">Upload failed: ' + err.message + '</div>'; });
+  };
+  reader.readAsText(fileInput.files[0]);
+});
+
+function deleteMember(name) {
+  if (!confirm('Delete all connections for ' + name + '?')) return;
+  fetch('${basePath}/api/connections/' + encodeURIComponent(name), { method: 'DELETE' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) { alert(data.error); }
+      else { location.reload(); }
+    }).catch(function(err) { alert('Delete failed: ' + err.message); });
+}`;
+
+  return renderLayout('Connections', body, { user, scripts, basePath });
 }
