@@ -109,6 +109,10 @@ You (orchestrator)
 │   │   └── connection-indexer (parses LinkedIn CSVs)
 │   │   Output: connection-index.json
 │
+│   ├── Phase 2d: FOUNDER-MARKET FIT ANALYSIS (optional, deferred until after synthesis)
+│   │   └── founder-fit-analyzer (analyzes team LinkedIn profiles vs opportunities)
+│   │   Output: founder-fit-analysis.json
+│
 ├── Phase 3: SCANNING (all sources — they run in parallel, no time savings from cutting)
 │   ├── Category A: 6 coordinators (each spawns batch sub-agents)
 │   ├── Category B: 6 single scanners
@@ -491,6 +495,38 @@ IF directory exists and has .csv files:
 ELSE:
   Log: "No team-connections directory found. Skipping LinkedIn connection indexing."
   Write empty connection-index: { "connections": [], "indexes": {}, "networkReach": null }
+
+### Step 2d: Founder-Market Fit Analysis (Optional — DEFERRED)
+
+After connection indexing (or if no connections), check if `/tmp/gapscout-<scan-id>/team-connections/` directory contains LinkedIn profile exports (Profile.csv, Positions.csv, Education.csv, Skills.csv).
+
+IF LinkedIn profile data exists:
+  **NOTE: This agent needs thesis.json and synthesis-6-opportunities.json.** Do NOT spawn it here — DEFER this spawn until after lean synthesis + first strategic review complete (Step 6b.5 in the first iteration). Record `founderFitDataAvailable: true` in orchestration-config.json for later use.
+
+  When spawned (in Step 6e, before report regeneration):
+  ```
+  TaskCreate({ description: "Phase 2d: Analyzing founder-market fit", status: "in_progress" })
+  ```
+  Save as `founder_fit_task_id`.
+
+  Agent({
+    description: "Analyze founder-market fit",
+    subagent_type: "founder-fit-analyzer",
+    prompt: "Analyze team LinkedIn profiles against scan thesis and top opportunities. Scan dir: {scan_dir}",
+    run_in_background: false
+  })
+
+  Wait for: founder-fit-analyzer-COMPLETE.txt
+  Read founder-fit-analysis.json. Log:
+  - "Founder fit analysis: best fit opportunity is {bestFitOpportunity}, overall verdict: {fitVerdict}"
+  - "Warm intros available: {warmIntroMap.length} relevant connections"
+
+  ```
+  TaskUpdate({ id: founder_fit_task_id, status: "completed" })
+  ```
+
+ELSE:
+  Log: "No LinkedIn profile data found. Skipping founder-market fit analysis."
 
 After connection indexing resolves, start discovery QA:
 ```
@@ -1203,8 +1239,33 @@ WHILE outer_iteration < max_outer_iterations:
     Also include those in the sprint re-run list. The outer loop pulls in deferred sprints ON DEMAND when the critic identifies the need.
 
   ═══════════════════════════════════════════════════════
-  STEP 6e: CITATION RE-VERIFICATION + REPORT REGENERATION
+  STEP 6e: FOUNDER FIT + CITATION RE-VERIFICATION + REPORT REGENERATION
   ═══════════════════════════════════════════════════════
+
+  **Founder-Market Fit Analysis (first iteration only):**
+  IF `founderFitDataAvailable == true` (from Step 2d) AND founder-fit-analysis.json does NOT yet exist:
+    Spawn founder-fit-analyzer now (thesis.json and synthesis-6-opportunities.json are available):
+
+    ```
+    TaskCreate({ description: "Phase 2d: Analyzing founder-market fit", status: "in_progress" })
+    ```
+    Save as `founder_fit_task_id`.
+
+    Agent({
+      description: "Analyze founder-market fit",
+      subagent_type: "founder-fit-analyzer",
+      prompt: "Analyze team LinkedIn profiles against scan thesis and top opportunities. Scan dir: {scan_dir}",
+      run_in_background: false
+    })
+
+    Wait for: founder-fit-analyzer-COMPLETE.txt
+    Read founder-fit-analysis.json. Log:
+    - "Founder fit analysis: best fit opportunity is {bestFitOpportunity}, overall verdict: {fitVerdict}"
+    - "Warm intros available: {warmIntroMap.length} relevant connections"
+
+    ```
+    TaskUpdate({ id: founder_fit_task_id, status: "completed" })
+    ```
 
   Re-run citation verification (5 parallel agents) to pick up all new evidence.
   Then regenerate the report:
@@ -1396,6 +1457,7 @@ All report generators receive:
 - `competitor-trust-scores.json` — competitor legitimacy scores (from Phase 2b)
 - `community-validation.json` — community validation suggestions (from Sprint 12, MANDATORY)
 - `connection-index.json` — team LinkedIn connection index (from Phase 2c, if exists)
+- `founder-fit-analysis.json` — founder-market fit analysis (from Phase 2d, if exists)
 - `citation-links-opportunities.json` — verified opportunity evidence URLs (from Step 7.5, MANDATORY)
 - `citation-links-competitors.json` — verified competitor and founder URLs (from Step 7.5, MANDATORY)
 - `citation-links-pain-themes.json` — verified pain theme evidence URLs (from Step 7.5, MANDATORY)

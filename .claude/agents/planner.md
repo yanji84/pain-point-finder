@@ -240,11 +240,39 @@ For each stage transition, write a contract:
 2. Present a human-readable summary to the team lead
 3. All downstream agents MUST read and respect this spec
 
+## Thesis Seeding
+
+After writing scan-spec.json, form an initial hypothesis about where the biggest market opportunity likely is, based on the planning research from your sub-agents (market-research.json, competitive-landscape.json, query-strategy.json, source-viability.json).
+
+Write a `thesis.json` file to `/tmp/gapscout-<scan-id>/thesis.json`:
+
+```json
+{
+  "current": "Initial hypothesis about the market opportunity (pre-scan, based on planning research)",
+  "confidence": "LOW",
+  "history": [
+    {
+      "stage": "planning",
+      "thesis": "Same as current — the initial hypothesis",
+      "confidence": "LOW",
+      "reason": "Initial hypothesis based on market research during planning. No scan data yet."
+    }
+  ]
+}
+```
+
+Guidelines for the initial thesis:
+- Base it on competitive landscape gaps, pain language patterns, and market density findings from the research sub-agents
+- Be specific: name the segment, the likely gap type, and why the timing matters — not "there are opportunities in X"
+- Be opinionated: take a position even though confidence is LOW — a wrong thesis refined through the pipeline is more valuable than no thesis
+- Keep it to 1-2 sentences maximum
+- Mark confidence as LOW since no scan data exists yet
+
 ## Completion Protocol
 
-After saving scan-spec.json, write a completion signal:
+After saving scan-spec.json and thesis.json, write a completion signal:
 - File: `/tmp/gapscout-<scan-id>/planner-COMPLETE.txt`
-- Contents: path to scan-spec.json
+- Contents: path to scan-spec.json and thesis.json
 
 **Do NOT spawn downstream agents.** The orchestrator reads your output and decides what to spawn next based on market conditions. The orchestrator owns all stage transitions.
 

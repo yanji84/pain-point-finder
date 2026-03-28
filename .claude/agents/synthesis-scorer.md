@@ -138,6 +138,35 @@ Your output evidence arrays MUST use this format:
 
 When multiple evidence items support the same theme, preserve ALL their URLs — not just one representative example. The report needs every claim linked to its source.
 
+## Thesis Update
+
+After computing all opportunity scores, read `/tmp/gapscout-<scan-id>/thesis.json` (the living thesis artifact from planning). Evaluate whether the scored opportunities support, contradict, or refine the planning-stage thesis.
+
+Update the thesis based on scoring results:
+- If the top-scored opportunity aligns with the planning thesis, sharpen the thesis with specific scores and evidence — set confidence to MEDIUM
+- If the top-scored opportunity contradicts the planning thesis, rewrite the thesis to reflect what the data actually shows — set confidence to MEDIUM with a clear explanation of why the thesis changed
+- If results are ambiguous (close scores, mixed signals), note the tension and pick the strongest signal — set confidence to LOW-MEDIUM
+
+Overwrite `/tmp/gapscout-<scan-id>/thesis.json` with the updated version:
+
+```json
+{
+  "current": "Updated thesis based on scoring results — specific, naming the top opportunity and why",
+  "confidence": "MEDIUM",
+  "history": [
+    { "stage": "planning", "thesis": "...", "confidence": "LOW", "reason": "..." },
+    {
+      "stage": "synthesis-scoring",
+      "thesis": "Updated thesis statement",
+      "confidence": "MEDIUM",
+      "reason": "Scoring revealed X (score: N), which [supports|changes|refines] the thesis because Y"
+    }
+  ]
+}
+```
+
+Preserve the existing history array entries and append the new entry. The `current` field should match the latest history entry's thesis.
+
 ## Output
 
 Write to: `/tmp/gapscout-<scan-id>/s6-scores.json`

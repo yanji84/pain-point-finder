@@ -21,6 +21,7 @@ Strategic insights must be grounded in evidence where possible. When citing mark
 ## Inputs
 
 Read from `/tmp/gapscout-{scan-id}/`:
+- `thesis.json` — the living thesis artifact (read FIRST — this is the thesis you will evolve)
 - `report.json` — current draft report
 - `synthesis-6-opportunities.json` — scored opportunities
 - `debate-round-{N}.json` — debate results (to build on, not repeat)
@@ -65,7 +66,8 @@ After all `opportunity-strategist` sub-agents complete, merge their outputs:
    - Recommend focus: which 1-2 opportunities have the highest strategic potential?
    - Identify the biggest blind spot across the entire report
 3. Select the best positioning recommendation from the sub-agents (for the #1 recommended-focus opportunity) and promote it to `topPositioningRecommendation` at the top level of the output
-4. Write the final output file
+4. Generate the `reportThesis` — synthesize debate verdicts, competitive analysis, and cross-opportunity insights into a single opinionated thesis statement with a thesis arc that threads through every report section (see "Thesis Generation" section below)
+5. Write the final output file
 
 ## Strategic Review Framework
 
@@ -131,6 +133,82 @@ For each opportunity, produce a **concrete, actionable positioning recommendatio
 - **evidenceBasis**: Which specific scan findings support this positioning (reference citation IDs or evidence URLs)
 
 The positioning must be grounded in evidence. If a positioning element is speculative, label it as `"confidence": "hypothesis"` with a `validationQuery`.
+
+## Thesis Evolution
+
+The thesis is a **living artifact** that has been evolving since planning. Your job is to read the current thesis, challenge it against debate/critique results, and update or rewrite it.
+
+### Step A: Read the Existing Thesis
+
+Read `/tmp/gapscout-{scan-id}/thesis.json` to understand the current thesis and its full history. Note the confidence level and how the thesis has changed through prior stages (planning, scoring, previous strategic reviews).
+
+### Step B: Evaluate Against New Evidence
+
+Compare the current thesis with:
+1. The top 1-2 recommended-focus opportunities from cross-opportunity analysis
+2. Debate verdicts (what was proven/disproven in debate-round-{N}.json)
+3. Critique findings (what the report-critic found in critique-round-{N}.json)
+4. The competitive landscape (where incumbents are strong/weak)
+5. Switching signals (where users are actually moving)
+
+Ask: Does the current thesis still hold? Is it too narrow? Too broad? Completely wrong?
+
+### Step C: Update the Thesis
+
+Based on the evaluation:
+- **If thesis survived debates and critiques intact**: Keep the core thesis, sharpen the language, set confidence to HIGH
+- **If thesis needs modification** (evidence demands refinement but not a rewrite): Update the thesis to incorporate new insights, set confidence to MEDIUM
+- **If thesis was fundamentally wrong** (evidence contradicts it): Rewrite the thesis entirely, set confidence to LOW (new thesis, not yet battle-tested), and explain the flip in the history reason
+
+Overwrite `/tmp/gapscout-{scan-id}/thesis.json`:
+
+```json
+{
+  "current": "The evolved thesis statement — specific, opinionated, evidence-grounded",
+  "confidence": "HIGH|MEDIUM|LOW",
+  "history": [
+    { "stage": "planning", "thesis": "...", "confidence": "LOW", "reason": "..." },
+    { "stage": "synthesis-scoring", "thesis": "...", "confidence": "MEDIUM", "reason": "..." },
+    {
+      "stage": "strategic-review-round-N",
+      "thesis": "The evolved thesis",
+      "confidence": "HIGH|MEDIUM|LOW",
+      "reason": "Debates [confirmed|challenged|disproved] the thesis because X. Critique revealed Y. The thesis [held|was refined|was rewritten] to reflect Z."
+    }
+  ]
+}
+```
+
+Preserve ALL existing history entries and append the new one.
+
+### Step D: Derive the Thesis Arc from the Living Thesis
+
+The `thesisArc` in the output JSON must be derived from the CURRENT thesis in thesis.json — not generated independently. Each arc entry should explain how that report section reinforces the evolved thesis.
+
+### Thesis Requirements
+
+- **Specific to the market scanned** — not generic. "There are underserved segments" is worthless. Name the segment, the gap, and the timing.
+- **Opinionated** — takes a position. "There are opportunities in X" is not a thesis. "The opportunity isn't X (incumbents closing that gap) but Y before Z happens" is a thesis.
+- **Evidence-grounded** — derived from debate verdicts, competitive analysis, and switching signals. Every claim in the thesis should trace back to scan data.
+- **Forward-looking** — implies what to build, why now, and what window is closing. The thesis should create urgency.
+- **Consistent with thesis.json** — the `oneSentence` in reportThesis MUST match the `current` field in thesis.json exactly.
+
+### Output
+
+Add `reportThesis` to the top level of the output JSON:
+
+```json
+"reportThesis": {
+  "oneSentence": "Must match thesis.json 'current' field exactly — the living thesis that has evolved through the pipeline",
+  "thesisArc": {
+    "competitiveLandscape": "How the competitive landscape section reinforces the thesis (one line)",
+    "unmetNeeds": "How the pain/needs section reinforces the thesis (one line)",
+    "opportunities": "How the opportunities section reinforces the thesis (one line)",
+    "risks": "How the risks section reinforces the thesis (one line)",
+    "nextSteps": "How the next steps section reinforces the thesis (one line)"
+  }
+}
+```
 
 ## Build on Debates, Don't Repeat Them
 
@@ -223,6 +301,16 @@ Write to: `/tmp/gapscout-{scan-id}/strategic-review-round-{N}.json`
     "goCommunity": "<where to find early users>",
     "antiPositioning": "<what NOT to be>",
     "evidenceBasis": "<supporting evidence>"
+  },
+  "reportThesis": {
+    "oneSentence": "<the single thesis statement that threads the entire report — max 2 sentences, specific, opinionated, actionable>",
+    "thesisArc": {
+      "competitiveLandscape": "<how the competitive landscape section reinforces the thesis>",
+      "unmetNeeds": "<how the pain/needs section reinforces the thesis>",
+      "opportunities": "<how the opportunities section reinforces the thesis>",
+      "risks": "<how the risks section reinforces the thesis>",
+      "nextSteps": "<how the next steps section reinforces the thesis>"
+    }
   }
 }
 ```

@@ -22,7 +22,7 @@ Before writing report.html, you MUST verify ALL of these. If ANY check fails, fi
 - Verify: grep your generated HTML for "opp-score" and confirm non-zero values
 
 ### CHECK 3: Table of Contents
-- Your HTML MUST include a `<nav>` element with id="toc" containing links to every section
+- Your HTML MUST include a `<nav>` element with id="toc-nav" containing links to all 6 sections plus appendix
 - TOC must be sticky/fixed on desktop, collapsible on mobile
 - Every `<h2>` section must have an id= attribute that the TOC links to
 
@@ -32,13 +32,13 @@ Before writing report.html, you MUST verify ALL of these. If ANY check fails, fi
 - Color-code: ESTABLISHED=green (>=70), CREDIBLE=blue (50-69), EARLY-STAGE=yellow (30-49), UNVERIFIED=orange (15-29), SUSPECT=red (<15)
 
 ### CHECK 5: Founder Profiles
-- IF synthesis-11-founder-profiles.json exists, render a "Leadership & Founders" section
+- IF synthesis-11-founder-profiles.json exists, render a "Leadership & Founders" subsection inside the Appendix
 - Show: founder names, backgrounds, funding raised, headcount trend, health signals
-- IF the file doesn't exist, show a note: "Founder profiles not available for this scan"
+- IF the file doesn't exist, show a note: "Founder profiles not available for this scan" inside the Appendix
 
 ### CHECK 6: Raw Findings Appendix
-- The report MUST include a collapsible "Raw Findings" appendix section after the Citation Index
-- It must contain a table with columns: Source | Date | Author Context | Problem | Current Solution | Frustration Level | WTP Signal | Quote
+- The report MUST include a "Raw Findings" table inside the collapsible Appendix section (id="appendix")
+- It must contain a table with columns: Source | Date | Author Context | Self-Promo | Problem | Current Solution | Frustration Level | WTP Signal | Quote
 - The table must have >= 20 rows (individual findings pulled from scan data files)
 - If fewer than 20 findings exist across all scan files, include all available findings and note the shortfall
 
@@ -57,10 +57,10 @@ Before writing report.html, you MUST verify ALL of these. If ANY check fails, fi
 - If selfPromoEvidence exists, show it as a tooltip (title attribute) on the badge
 
 ### CHECK 9: Positioning Recommendation
-- If report.json has a `positioningRecommendation` object, the report MUST contain a "Recommended Positioning" section
-- The section MUST include: target persona, positioning statement (differentiator), and price range at minimum
-- The section must be linked from the TOC with id="positioning-recommendation"
-- If positioningRecommendation is null or missing, omit the section and its TOC entry
+- If report.json has a `positioningRecommendation` object, the report MUST contain positioning details within the Top Opportunities section (id="top-opportunities")
+- The positioning MUST include: target persona, positioning statement (differentiator), and price range at minimum
+- Render within the relevant opportunity card or as a summary card after all 3 opportunity cards
+- If positioningRecommendation is null or missing, omit the positioning details
 
 # Report Generator (HTML)
 
@@ -78,8 +78,10 @@ Read these files from `/tmp/gapscout-<scan-id>/`:
 - `scan-audit.json` — scan audit results (if exists)
 - `deep-research-summary.json` — deep research verification results (if exists)
 - `connection-index.json` — team LinkedIn connection index with network reach data (if exists)
+- `founder-fit-analysis.json` — founder-market fit analysis with per-opportunity fit scores and warm intros (if exists)
 - `community-validation.json` — community validation with network outreach suggestions (if exists)
 - `delta-summary.json` — delta comparison with previous scan (if exists, resume mode only)
+- `thesis.json` — the living thesis artifact with current thesis and evolution history (if exists)
 - `scan-hn.json`, `scan-reddit.json`, `scan-trustpilot.json`, `scan-producthunt.json`, `scan-websearch-*.json` — raw scan data files (fallback for Raw Findings if report.json lacks `rawFindings`)
 
 ## Task
@@ -92,36 +94,16 @@ The HTML report MUST include a sticky/fixed Table of Contents for navigation. Th
 
 1. **TOC placement:** Immediately after the report header/title, before the Executive Summary section.
 
-2. **TOC structure:** A `<nav>` element with id="toc" containing an ordered list of all major sections:
+2. **TOC structure:** A `<nav>` element with id="toc-nav" containing links to the 6 sections plus appendix:
 ```html
-<nav id="toc" class="toc">
-  <h2>Table of Contents</h2>
-  <ol>
-    <li><a href="#executive-summary">Executive Summary</a></li>
-    <li><a href="#competitive-landscape">Competitive Landscape</a></li>
-    <li><a href="#pain-analysis">Pain Analysis</a></li>
-    <li><a href="#unmet-needs">Unmet Needs</a></li>
-    <li><a href="#switching-signals">Switching Signals</a></li>
-    <li><a href="#gap-matrix">Gap Matrix</a></li>
-    <li><a href="#ranked-opportunities">Ranked Opportunities</a>
-      <ol>
-        <li><a href="#opp-1">OPP-1: [Title] — Score: N</a></li>
-        <li><a href="#opp-2">OPP-2: [Title] — Score: N</a></li>
-        <!-- one entry per opportunity -->
-      </ol>
-    </li>
-    <li><a href="#signal-strength">Signal Strength</a></li>
-    <li><a href="#counter-positioning">Counter-Positioning</a></li>
-    <li><a href="#consolidation-forecast">Consolidation Forecast</a></li>
-    <li><a href="#founder-profiles">Founder Profiles</a></li>
-    <li><a href="#community-validation">Community Validation</a></li>
-    <li><a href="#network-reach">Network Reach</a></li>
-    <li><a href="#top-demand-signals">Top 20 Demand Signals</a></li>
-    <li><a href="#data-quality">Data Quality</a></li>
-    <li><a href="#citation-index">Citation Index</a></li>
-    <li><a href="#positioning-recommendation">Recommended Positioning</a></li>
-    <li><a href="#raw-findings">Raw Findings</a></li>
-  </ol>
+<nav id="toc-nav">
+  <a href="#executive-summary">Executive Summary</a>
+  <a href="#competitive-landscape">Competitive Landscape</a>
+  <a href="#unmet-needs-pain">Unmet Needs & Pain</a>
+  <a href="#top-opportunities">Top Opportunities</a>
+  <a href="#risks">Risks</a>
+  <a href="#next-steps">Next Steps</a>
+  <a href="#appendix">Appendix</a>
 </nav>
 ```
 
@@ -129,45 +111,32 @@ The HTML report MUST include a sticky/fixed Table of Contents for navigation. Th
 ```html
 <h2 id="executive-summary">1. Executive Summary</h2>
 <h2 id="competitive-landscape">2. Competitive Landscape</h2>
-<!-- etc -->
+<h2 id="unmet-needs-pain">3. Unmet Needs & Pain Points</h2>
+<h2 id="top-opportunities">4. Top Opportunities</h2>
+<h2 id="risks">5. Risks</h2>
+<h2 id="next-steps">6. Next Steps</h2>
 ```
 
-4. **Nested TOC entries:** The Ranked Opportunities section should have nested sub-entries for each opportunity, showing the opportunity title and score. Similarly, Competitive Landscape can have sub-entries for each segment.
-
-5. **TOC styling (add to CSS):**
+4. **TOC styling (add to CSS):**
 ```css
-.toc {
+#toc-nav {
   background: var(--card-bg-dark);
   border: 1px solid var(--border-dark);
   border-radius: 8px;
-  padding: 20px 24px;
+  padding: 16px 24px;
   margin: 24px 0 32px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
 }
-.toc h2 {
-  font-size: 1.1rem;
-  margin-bottom: 12px;
-  color: var(--accent-blue);
-}
-.toc ol {
-  list-style-type: decimal;
-  padding-left: 20px;
-  margin: 0;
-}
-.toc ol ol {
-  list-style-type: decimal;
-  margin-top: 4px;
-  font-size: 0.9em;
-}
-.toc li {
-  margin-bottom: 6px;
-  line-height: 1.4;
-}
-.toc a {
+#toc-nav a {
   color: var(--text-dark);
   text-decoration: none;
   border-bottom: 1px dotted var(--border-dark);
+  font-size: 0.95rem;
+  line-height: 1.4;
 }
-.toc a:hover {
+#toc-nav a:hover {
   color: var(--accent-blue);
   border-bottom-color: var(--accent-blue);
 }
@@ -186,17 +155,12 @@ The HTML report MUST include a sticky/fixed Table of Contents for navigation. Th
 }
 ```
 
-6. **Back-to-top links:** At the end of each major section, add a "Back to top" link:
+5. **Back-to-top links:** At the end of each major section, add a "Back to top" link:
 ```html
-<a href="#toc" class="back-to-top">↑ Back to Table of Contents</a>
+<a href="#toc-nav" class="back-to-top">↑ Back to Table of Contents</a>
 ```
 
-7. **Dynamic generation:** The TOC must be generated dynamically from the actual report content — if a section is absent (e.g., no delta summary, no market sizing), it should NOT appear in the TOC. Only list sections that have content.
-
-8. **Opportunity scores in TOC:** Each opportunity entry in the TOC should show the score and verdict badge inline, making the TOC itself a useful summary:
-```html
-<li><a href="#opp-1">OPP-1: Phone-native MCP Auth SDK — <span class="score-badge green">87</span> VALIDATED</a></li>
-```
+6. **Dynamic generation:** The TOC links are always present for all 6 sections plus appendix since all sections are mandatory.
 
 Generate a self-contained HTML report from report.json:
 
@@ -204,113 +168,148 @@ Generate a self-contained HTML report from report.json:
    - Single-file, self-contained HTML (all CSS inline, no external dependencies)
    - Responsive layout that works on desktop and mobile
    - Dark/light mode support via CSS media query
-2. **Sections (in order).** Each section `<h2>` must have an `id` attribute matching its TOC anchor. See Table of Contents section for required IDs.
-   - **Header**: Market name, date, scan ID, QA badge (PASS=green, MARGINAL=yellow, FAIL=red), citation count badge showing total references
-   - **What Changed** (if delta-summary.json exists, show FIRST after header):
-     - Narrative summary in a highlighted callout box with a "Delta" badge
-     - Opportunity score change table with colored arrows (↑green, ↓red, →gray)
-     - New competitor count badge
-     - New evidence count badge
-     - Source coverage change bars (before/after visualization)
-     - Collapsible "New Findings" section listing new pain themes and signals
-   - **Executive Summary**: Top 3 opportunities as cards with scores
-   - **Competitive Landscape**: Competitor table grouped by segment, tier badges. If competitor-trust-scores.json exists, add a "Trust" column with colored tier badges (ESTABLISHED=green, CREDIBLE=blue, EARLY-STAGE=yellow, UNVERIFIED=orange, SUSPECT=red)
-   - **Trust Assessment** (if competitor-trust-scores.json exists): Trust tier distribution summary, competitors flagged as UNVERIFIED/SUSPECT with red flags listed, impact on opportunity scoring
-   - **Pain Analysis**: Collapsible per-competitor pain themes with severity badges
-   - **Gap Matrix**: Feature x Competitor table with color-coded cells (YES=red, PARTIAL=yellow, NO=green)
-   - **Ranked Opportunities**: Cards with score breakdowns, idea sketches, WTP evidence
-   - **Market Sizing** (if report.json has marketSizing): Per-opportunity TAM/SAM/SOM cards with confidence badges (HIGH=green, MEDIUM=yellow, LOW=red), pricing strategy table with competitor benchmarks, GTM playbook in collapsible sections
-   - **Root Cause Analysis** (if report.json has causalChains): Causal chain diagrams as indented lists (Symptom → Proximate → Structural → Root), structural forces in a 2x2 grid, change catalysts with timeline bars
-   - **Strategic Narrative** (if report.json has strategicNarrative): Market story arc as a styled prose section with pull quotes, BUILD/WATCH/AVOID as green/yellow/red card columns, opportunity playbooks with kill-shot tests highlighted, decision framework as a responsive grid/table
-   - **Switching Flow**: Migration pairs as a list with directional indicators
-   - **Signal Strength**: Evidence confidence tiers — GOLD/SILVER/BRONZE badges per pain theme and opportunity. Show top evidence items per GOLD claim.
-   - **Counter-Positioning**: Per-opportunity moat assessment cards with STRONG(green)/MEDIUM(yellow)/WEAK(red) badges, structural barriers list, red-team rebuttals in collapsible sections
-   - **Market Consolidation**: M&A probability table (competitor × acquirer/target %), segment convergence arrows, failure risk badges, 2028 market shape summary
-   - **Founder Profiles**: Leadership cards per competitor showing founder photo placeholder, background, funding, headcount trend arrow (↑↓→), health signal badges
-   - **Verification Deep Dive** (if deep-research-summary.json exists or report.json has deepResearchVerification):
-     - Convergence status indicator: "Converged in N rounds" (green) or "Did not converge after N rounds" (orange)
-     - Per-opportunity verification cards showing:
-       - Verification badge: STRENGTHENED (green), UNCHANGED (gray), WEAKENED (orange), INVALIDATED (red)
-       - Score change arrow: upward arrow with green for positive change, downward arrow with red for negative, right arrow with gray for no change
-       - Original score vs adjusted score display
-       - Confidence level badge (HIGH=green, MEDIUM=yellow, LOW=red)
-       - Collapsible new evidence section per opportunity using `<details>`/`<summary>`, listing each piece of evidence with its source URL, finding, and impact (confirms=green, contradicts=red, neutral=gray)
-     - Invalidated opportunities section (if any): struck-through entries with red INVALIDATED badge and reason
-     - Summary stats: total new evidence collected, rounds completed, opportunities changed
-   - **Market Sizing** (if report.json has marketSizing): Per-opportunity TAM/SAM/SOM cards with confidence badges (HIGH=green, MEDIUM=yellow, LOW=red), pricing strategy table with competitor price benchmarks, GTM playbook in collapsible sections with beachhead segment highlighted, first-100-customers steps as numbered list
-   - **Root Cause Analysis** (if report.json has causalChains): Causal chain diagrams rendered as indented arrow lists (Symptom → Proximate → Structural → Root), structural forces in a 2x2 grid (Incentive/Technical/Business Model/Regulatory), change catalysts with likelihood badges and timeline bars, second-order effects as bullet list
-   - **Strategic Narrative** (if report.json has strategicNarrative): Market story arc rendered as styled prose section with pull-quote callouts for key insights, BUILD/WATCH/AVOID recommendations as green/yellow/red card columns, per-opportunity playbooks with kill-shot test highlighted in a callout box, decision framework as responsive 2x2 grid table (solo-technical/solo-nontechnical/funded/existing-company), contrarian insights in a highlighted sidebar
-   - **What Changed** (if report.json has deltaSummary, show PROMINENTLY after executive summary): Delta narrative in a highlighted callout with "Delta" badge, opportunity score change table with colored arrows (↑green ↓red →gray), new competitor/evidence count badges, source coverage change bars, collapsible new findings section
-   - **Community Validation** (if report.json has communityValidation): Per-opportunity community recommendation cards showing:
-     - Platform icon/badge (Reddit, Discord, HN, Forum, etc.) with community name and subscriber count
-     - Relevance/activity/accessibility/signal quality scores as colored mini-badges (1-2=red, 3=yellow, 4-5=green)
-     - "Why relevant" description and engagement tip
-     - Collapsible recent threads section with links
-     - Validation plan in a styled card with: survey question in a callout box, engagement template in a copyable `<pre>` block, "What to look for" as green checkmark list, "Red flags" as red X list
-     - Cross-cutting communities section at bottom showing communities that span multiple opportunities
-   - **Network Reach** (if report.json has networkReach that is not null):
+2. **Header** (before Section 1): Market name, date, scan ID, QA badge (PASS=green, MARGINAL=yellow, FAIL=red), citation count badge showing total references. If delta-summary.json exists, show a "What Changed" callout with narrative summary, score change arrows, and new evidence count.
 
-### Network Reach Section
+## Report Structure (6 Sections + Appendix)
 
-If `connection-index.json` exists and has connections, render a Network Reach section:
+The report MUST follow this exact structure. Every section opens with a 1-2 sentence paragraph that connects to the report thesis (read from strategic-review-round-*.json → reportThesis.thesisArc).
 
-**Section header:** "Network Reach — Your Team's Connections"
+### Section 1: Executive Summary
+- id="executive-summary"
+- State the thesis prominently as a styled blockquote with accent left border and a confidence badge (HIGH=green, MEDIUM=yellow, LOW=red):
+  ```html
+  <blockquote class="thesis-statement">
+    <span class="thesis-label">Report Thesis</span>
+    <span class="confidence-badge confidence-HIGH">HIGH CONFIDENCE</span>
+    <p>"The thesis statement from report.json thesis.statement"</p>
+  </blockquote>
+  ```
+  CSS for `.thesis-statement`: `border-left: 4px solid var(--accent-blue); background: var(--card-bg-dark); padding: 20px 24px; margin: 24px 0; border-radius: 0 8px 8px 0; font-size: 1.15rem; font-style: italic;`
+  CSS for `.thesis-label`: `display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent-blue); font-style: normal; margin-bottom: 8px;`
+  CSS for `.confidence-badge`: `display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; font-style: normal; font-weight: bold; margin-left: 8px;`
+  CSS for `.confidence-HIGH`: `background: #22c55e; color: #000;` `.confidence-MEDIUM`: `background: #eab308; color: #000;` `.confidence-LOW`: `background: #ef4444; color: #fff;`
 
-**Per opportunity:**
-- Show a card/box for each opportunity with relevant connections
-- List top 5 most relevant connections per opportunity
-- For each connection: name, company, position, connected via [team member(s)], match type badge
-- Suggested outreach question in italics
-- "Warm intro via [team member]" tag
+- Add a collapsible "How This Thesis Evolved" subsection immediately after the thesis blockquote, showing the thesis.history timeline from report.json (or thesis.json directly):
+  ```html
+  <details class="thesis-evolution">
+    <summary>How This Thesis Evolved</summary>
+    <div class="thesis-timeline">
+      <div class="thesis-stage">
+        <span class="stage-badge">Planning</span>
+        <span class="confidence-badge confidence-LOW">LOW</span>
+        <p class="stage-thesis">"Initial hypothesis..."</p>
+        <p class="stage-reason">Reason for this thesis at this stage</p>
+      </div>
+      <div class="thesis-arrow">↓ Scoring changed it because...</div>
+      <div class="thesis-stage">
+        <span class="stage-badge">Synthesis Scoring</span>
+        <span class="confidence-badge confidence-MEDIUM">MEDIUM</span>
+        <p class="stage-thesis">"Updated thesis..."</p>
+        <p class="stage-reason">Reason for update</p>
+      </div>
+      <div class="thesis-arrow">↓ Debates revealed...</div>
+      <div class="thesis-stage">
+        <span class="stage-badge">Strategic Review</span>
+        <span class="confidence-badge confidence-HIGH">HIGH</span>
+        <p class="stage-thesis">"Final thesis..."</p>
+        <p class="stage-reason">Reason for final thesis</p>
+      </div>
+    </div>
+  </details>
+  ```
+  CSS for `.thesis-evolution`: `margin: 16px 0 24px; border: 1px solid var(--border-dark); border-radius: 8px;`
+  CSS for `.thesis-evolution summary`: `padding: 12px 16px; cursor: pointer; font-weight: 600; color: var(--accent-blue);`
+  CSS for `.thesis-timeline`: `padding: 16px 24px;`
+  CSS for `.thesis-stage`: `padding: 12px 16px; background: var(--card-bg-dark); border-radius: 6px; margin-bottom: 4px;`
+  CSS for `.stage-badge`: `display: inline-block; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; background: var(--accent-blue); color: #fff; margin-right: 8px;`
+  CSS for `.stage-thesis`: `font-style: italic; margin: 8px 0 4px;`
+  CSS for `.stage-reason`: `font-size: 0.85rem; color: var(--text-muted, #9ca3af); margin: 0;`
+  CSS for `.thesis-arrow`: `text-align: center; padding: 8px 0; color: var(--text-muted, #9ca3af); font-size: 0.85rem;`
 
-**Summary stats at the top:**
-- Total team connections indexed: {N} across {M} team members
-- Connections at competitor companies: {N}
-- Connections matching target personas: {N}
-- Opportunities with network coverage: {N}/{total}
+  Generate the timeline dynamically from report.json `thesis.history` array. Between each stage, show the next stage's `reason` as the arrow text (abbreviated to explain the transition). If `thesis.history` has only one entry, still show it but without arrows. If `thesis.history` is missing, omit this collapsible entirely.
 
-**Privacy:** Never display email addresses in the HTML report. Show names and companies only.
+- 3-4 paragraph overview: market size/shape, key finding, top recommendation
+- Quick stats bar: competitors mapped, posts analyzed, sources scanned, iterations run
+- End with: "This report argues that [thesis]. The sections below present the evidence."
 
-If connection-index.json does not exist, render a placeholder:
-"Upload your team's LinkedIn connections to enable network-based outreach suggestions. See: linkedin.com/help/linkedin/answer/a566336"
+### Section 2: Competitive Landscape
+- id="competitive-landscape"
+- Opens with thesisArc.competitiveLandscape connecting to thesis
+- Market segments table with trust scores (numeric + color-coded badges)
+- If competitor-trust-scores.json exists, add a "Trust" column with colored tier badges (ESTABLISHED=green >=70, CREDIBLE=blue 50-69, EARLY-STAGE=yellow 30-49, UNVERIFIED=orange 15-29, SUSPECT=red <15)
+- Gap Matrix EMBEDDED here (not separate section) — Feature x Competitor heatmap with color-coded cells (YES=red, PARTIAL=yellow, NO=green)
+- Key insight callout: what the landscape tells us about where the opportunity lives
+- Switching signals folded in as "Market Dynamics" subsection (who's leaving what, migration flows with directional indicators)
 
-   - **Recommended Positioning** (if report.json has positioningRecommendation): Render as a prominent card/section with id="positioning-recommendation":
-     - **Target Persona**: who specifically to sell to — displayed as a bold callout heading
-     - **Positioning Statement**: how to position the product — in a highlighted quote/blockquote block with accent left border
-     - **Differentiator**: what makes it different — with emphasis styling in a distinct card
-     - **Price Range**: recommended pricing based on WTP signals — in a green pricing badge/card
-     - **Go-to Community**: where to find early users (specific subreddits, Discord servers, HN threads) — as clickable links where possible, rendered as pill badges
-     - **Anti-Positioning**: what NOT to be — in a red/warning styled box with red left border
-     - **Evidence Basis**: which findings support this positioning — with inline citation links
-     - Style as a prominent card with a gradient accent border (e.g., left border gradient from blue to purple) to make it stand out as a key actionable output
-     - If positioningRecommendation is null or missing, omit this section entirely
-   - **Top 20 Demand Signals** (if report.json has topDemandSignals): Section with id="top-demand-signals" showing the 20 highest-signal demand data points across all sources. Render as a styled table with columns:
-     - **Rank**: Sequential 1-20
-     - **Platform**: Badge (HN/Reddit/Trustpilot/PH/Web) with link to source URL
-     - **Date**: Publication date
-     - **Specificity**: Color-coded badge — high(green), medium(yellow), low(gray)
-     - **Pain Level**: Color-coded badge — showstopper(red), blocker(orange), mild(gray)
-     - **Engagement**: Numeric score with bar visualization
-     - **Summary**: One-line demand description
-     - **Quote**: Exact user words in italics (max 200 chars, full quote in tooltip)
-     - **Demand Type**: Badge showing categorization
-     Style with alternating row colors. Add a summary callout at top showing: total demand signals found, median price point (if available), most common frequency pattern, and most common demand type. If topDemandSignals is missing or empty, omit this section.
-   - **Scan Audit** (if scan-audit.json exists): Per-source data integrity table with PASS(green)/WARN(yellow)/FAIL(red) badges, post count discrepancies, provenance issues, query coverage gaps
-   - **Data Quality**: QA scores table
-   - **Raw Findings** (MANDATORY appendix): Collapsible `<details>` section with id="raw-findings" containing individual post-level findings preserved from scan data. Pull from report.json `rawFindings` array (which is sourced from scan-hn.json, scan-reddit.json, scan-trustpilot.json, scan-producthunt.json, scan-websearch-*.json). Render as a responsive HTML table with columns:
-     - **Source**: Platform badge (HN/Reddit/Trustpilot/PH/Web) with link to original post
-     - **Date**: Publication date
-     - **Author Context**: Badge showing developer/founder/enterprise/hobbyist/unknown
-     - **Self-Promo**: If `selfPromo` is `true`, show an orange "SELF-PROMO" badge (`background: #f59e0b; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;`). If `selfPromo` is `"suspected"`, show a lighter "SUSPECTED SELF-PROMO" badge (`background: #fbbf24`). If `selfPromoEvidence` exists, add it as a `title` tooltip on the badge. If `selfPromo` is `false` or absent, leave the cell empty.
-     - **Problem**: The core problem or complaint described
-     - **Current Solution**: What the author is currently using (if mentioned)
-     - **Frustration Level**: Color-coded badge — mild(gray), blocker(orange), showstopper(red)
-     - **WTP Signal**: Any willingness-to-pay indicator (price mentions, "I'd pay", budget references)
-     - **Quote**: Key verbatim quote from the post (max 200 chars, with full quote in tooltip)
-     Top 30 findings sorted by engagement score (upvotes/score). Each row links to the source URL. Style the table with alternating row colors and horizontal scroll on mobile. If rawFindings is missing or empty in report.json, read scan-*.json files directly from the scan directory as fallback.
-   - **References (Bibliography)**: Numbered bibliography section at bottom of report. Each entry formatted as:
-     `[N] "Quote excerpt..." — Source Type, Date. URL`
-     Entries have alternating row colors for readability.
+### Section 3: Unmet Needs & Pain Points
+- id="unmet-needs-pain"
+- Opens with thesisArc.unmetNeeds connecting to thesis
+- Pain themes with severity badges, evidence quotes, citation links
+- Unmet needs cards with gap classification
+- Top 20 Demand Signals TABLE embedded here (not separate section) — ranked by specificity + pain level, with columns: Rank, Platform badge (HN/Reddit/Trustpilot/PH/Web) with source link, Date, Specificity badge (high=green, medium=yellow, low=gray), Pain Level badge (showstopper=red, blocker=orange, mild=gray), Engagement score, Summary, Quote (max 200 chars, full in tooltip), Demand Type badge
+- Self-promo badges on findings where detected: orange "SELF-PROMO" badge for `selfPromo: true`, lighter "SUSPECTED SELF-PROMO" for `selfPromo: "suspected"`, with `selfPromoEvidence` as tooltip
+- Each pain point links back to which competitors it affects
+
+### Section 4: Top Opportunities (max 3)
+- id="top-opportunities"
+- Opens with thesisArc.opportunities connecting to thesis
+- EXACTLY 3 opportunity cards (no more), each with:
+  - Score badge (color gradients: red 0-39, yellow 40-69, green 70-100), debate verdict (BULL/BEAR/SPLIT)
+  - Positioning recommendation (target persona, differentiator, price range)
+  - Narrowest wedge (smallest product that proves demand)
+  - Competitive moat analysis (STRONG=green/MEDIUM=yellow/WEAK=red badges, structural barriers, red-team rebuttals in collapsible sections)
+  - Key evidence (top 3 citations)
+- Combined Stack Thesis callout (if applicable — how the 3 relate)
+- If report.json has `positioningRecommendation`, render positioning details (target persona, positioning statement, differentiator, price range, go-to community, anti-positioning) within the relevant opportunity card or as a summary card after all 3 opportunities
+
+#### Founder-Market Fit Assessment
+- IF founder-fit-analysis.json exists, render after the opportunity cards:
+  - Team summary (members, backgrounds, key skills)
+  - Per-opportunity fit scores as a visual scorecard (5 dimensions, 0-10 bars using CSS width percentage — e.g., `<div class="fit-bar" style="width: {score*10}%"></div>`)
+  - Best fit opportunity highlighted with a green accent border
+  - Gaps & hiring priorities callout box (red/amber left border) listing skill gaps and recommended hires
+  - Honest assessment quote block: `<blockquote class="founder-fit-verdict">` with the fitVerdict (STRONG_FIT=green, MODERATE_FIT=yellow, WEAK_FIT=orange, MISMATCH=red border)
+- IF not available, show: "No team LinkedIn data provided. Upload via the web UI for founder-market fit analysis."
+
+### Section 5: Risks
+- id="risks"
+- Opens with thesisArc.risks connecting to thesis
+- Debate bear cases (the strongest arguments AGAINST each opportunity, with citations)
+- Regulatory risks (legislation, enforcement actions, compliance requirements)
+- Market timing risks (passkey adoption, incumbent response timeline)
+- Each risk rated: probability (HIGH/MEDIUM/LOW) x impact (HIGH/MEDIUM/LOW)
+- Counter-evidence that held up during refutation testing
+
+### Section 6: Next Steps
+- id="next-steps"
+- Opens with thesisArc.nextSteps connecting to thesis
+- 3-5 specific people/communities to talk to for validation
+- 1 validation experiment to run this week
+- MVP scope (narrowest wedge from top opportunity)
+- Price point to test (from WTP signals)
+- Go-to community (specific subreddits, Discord servers, HN threads — as clickable links where possible, rendered as pill badges)
+- Anti-positioning: what NOT to build (in a red/warning styled box with red left border)
+- If report.json has communityValidation, embed per-opportunity community recommendation cards showing: platform badge with community name and subscriber count, relevance/activity/accessibility/signal quality scores as colored mini-badges (1-2=red, 3=yellow, 4-5=green), engagement tip, validation plan with survey question and engagement template
+- If connection-index.json exists and has connections, embed a "Network Reach" subsection: top 5 most relevant connections per opportunity (name, company, position, connected via team member, match type badge), suggested outreach question in italics, summary stats (total connections, competitor connections, persona matches). Privacy: never display email addresses. If no connections, show upload prompt.
+
+#### Warm Intros from Team Network
+- IF founder-fit-analysis.json has warmIntroMap with entries, render:
+  - Table with columns: Connection Name | Company | Title | Relevance | Use Case
+  - Grouped by opportunity (use opportunity name as a sub-header row)
+  - Highlight connections at competitor companies with a blue "COMPETITOR" badge and target customers with a green "TARGET CUSTOMER" badge
+  - CSS: table uses alternating row colors, badges use `display: inline-block; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: bold;`
+- IF not available, show: "Upload team LinkedIn exports for network-based outreach suggestions."
+
+### Appendix (collapsed by default)
+- id="appendix"
+- Wrapped in `<details><summary>Appendix: Methodology, Data Quality & Raw Findings</summary>`
+- **Raw Findings** table (top 30 by engagement): Responsive HTML table with columns — Source (platform badge with link), Date, Author Context badge, Self-Promo badge, Problem, Current Solution, Frustration Level badge (mild=gray, blocker=orange, showstopper=red), WTP Signal, Quote (max 200 chars, full in tooltip). Sorted by engagement score, alternating row colors, horizontal scroll on mobile. Pull from report.json `rawFindings` array; fallback to scan-*.json files if missing.
+- **Methodology**: Scan params, trust formula, scoring methodology
+- **Data Quality**: QA scores table, scan audit results (if scan-audit.json exists — per-source data integrity with PASS=green/WARN=yellow/FAIL=red badges)
+- **Iteration History** (if iterative mode): Convergence status, verification deep dive (per-opportunity verification cards with STRENGTHENED/UNCHANGED/WEAKENED/INVALIDATED badges, score change arrows, confidence levels, collapsible new evidence), delta summary if resume mode
+- **Founder Profiles** (if synthesis-11-founder-profiles.json exists): Leadership cards per competitor showing background, funding, headcount trend arrow, health signal badges
+- **Full Citation Bibliography**: Numbered bibliography section. Each entry formatted as: `<div id="cite-N">[N] "Quote..." — Source. <a href="URL">URL</a></div>` with alternating row colors
+
 3. **Styling:**
    - Clean, professional design (think Stripe or Linear docs)
    - Score badges with color gradients (red 0-39, yellow 40-69, green 70-100)
@@ -383,13 +382,15 @@ The file should be a complete, valid HTML document starting with `<!DOCTYPE html
 After generating the HTML string but BEFORE writing to disk, run these checks on your output:
 
 1. Count occurrences of `<a href=` — must be >= 50
-2. Count occurrences of `<nav` — must be >= 1 (TOC)
+2. Count occurrences of `<nav` — must be >= 1 (TOC with id="toc-nav")
 3. Search for `>0</` near score elements — must be 0 occurrences (no hardcoded zeros for scores)
 4. Search for `trust` or `Trust` — must appear in competitor table
-5. Search for `id="raw-findings"` — must appear exactly once (Raw Findings appendix)
-6. Count `<tr>` elements inside the raw-findings section — must be >= 21 (header + 20 data rows minimum)
+5. Search for `id="appendix"` — must appear exactly once (collapsible Appendix section)
+6. Count `<tr>` elements inside the appendix Raw Findings table — must be >= 21 (header + 20 data rows minimum)
 7. Count `href="#ref-` occurrences and `id="ref-` occurrences — they must be equal (no orphan anchor links)
-8. If report.json has `positioningRecommendation`, search for `id="positioning-recommendation"` — must appear exactly once
-9. If any check fails, fix the HTML and re-check before writing
+8. If report.json has `positioningRecommendation`, verify positioning details appear inside the `id="top-opportunities"` section
+9. If report.json has `thesis.history` with 2+ entries, search for `thesis-evolution` — must appear exactly once (collapsible thesis timeline)
+10. Search for `thesis-statement` — must appear exactly once (thesis blockquote in executive summary)
+11. If any check fails, fix the HTML and re-check before writing
 
 Report your self-test results in your completion message.
