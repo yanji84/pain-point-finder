@@ -72,6 +72,21 @@ Read these files from the scan directory:
    - Instructions to write output to `/tmp/gapscout-<scan-id>/scan-trustpilot-batch-<N>.json`
    - Instructions to compute a `credibility` object for each review (see Per-Review Credibility Scoring below)
    - Instructions to classify each review into pain themes with severity ratings
+   - Instructions to extract the following fields for raw findings passthrough on each review:
+     - `authorContext`: "developer" | "founder" | "enterprise" | "hobbyist" | "unknown" — infer from review content and writing style (mentions of "our company" or "our team" = enterprise, technical jargon = developer, personal use = hobbyist)
+     - `frustrationLevel`: "mild" | "blocker" | "showstopper" — infer from language intensity, star rating (1 star = likely blocker/showstopper, 2-3 stars = mild/blocker), urgency words, stated impact
+     - `wtpSignal`: any mention of price, budget, "I'd pay", "worth $X", current spending, or pricing complaints (null if none found)
+     - `selfPromo`: true/false — is the reviewer promoting a competing product? (check if they recommend a specific alternative they appear affiliated with)
+   - Instructions to extract `demandSignals` from each review:
+     ```json
+     "demandSignals": {
+       "volume": "any mention of quantity (e.g., '100/day', '50 agents', 'thousands of verifications') or null",
+       "frequency": "daily|weekly|monthly|one-time|null",
+       "pricePoint": "any mention of price/budget/spending (e.g., '$X/mo', 'currently paying $Y') or null",
+       "persistentVsDisposable": "does the user need persistent dedicated resources or one-time disposable? or null"
+     }
+     ```
+     Only populate fields where the review explicitly mentions these signals. Do NOT infer or fabricate demand data.
 
 4. Wait for all batch files to appear: `scan-trustpilot-batch-1.json` through `scan-trustpilot-batch-N.json`
 
@@ -135,6 +150,16 @@ Write to `/tmp/gapscout-<scan-id>/scan-trustpilot.json`:
           "url": "<trustpilot review URL>",
           "severity": "CRITICAL|HIGH|MEDIUM|LOW",
           "stars": <1-3>,
+          "authorContext": "developer|founder|enterprise|hobbyist|unknown",
+          "frustrationLevel": "mild|blocker|showstopper",
+          "wtpSignal": "<price/budget/WTP mention or null>",
+          "selfPromo": false,
+          "demandSignals": {
+            "volume": "<quantity mention or null>",
+            "frequency": "daily|weekly|monthly|one-time|null",
+            "pricePoint": "<price/budget mention or null>",
+            "persistentVsDisposable": "<persistent|disposable|null>"
+          },
           "credibility": {
             "score": "<0-100>",
             "tier": "HIGH|MEDIUM|LOW",

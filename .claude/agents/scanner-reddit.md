@@ -152,12 +152,39 @@ If the orchestration-config or prompt indicates "deep" mode:
 
    Include the `credibility` object on every entry in `rawPosts` and on every entry in `painThemes[].evidence`.
 
-7. For each post, classify into pain themes:
+7. For each post, extract demand signals and classify into pain themes:
    - Extract the core complaint or frustration
    - Assign a theme name (descriptive, e.g. "commission-rate-too-high" not "pricing")
    - Rate intensity: URGENT (switching/quitting), ACTIVE (seeking workarounds), LATENT (grumbling)
    - Extract the best quote
    - Preserve the original URL
+   - Extract the following fields for raw findings passthrough:
+     - `authorContext`: "developer" | "founder" | "enterprise" | "hobbyist" | "unknown" — infer from post content, profile, subreddit context, and writing style (e.g., "I'm building..." = developer/founder, mentions of "my team" or "our company" = enterprise, hobby project mentions = hobbyist)
+     - `frustrationLevel`: "mild" | "blocker" | "showstopper" — infer from language intensity, urgency words, stated impact (e.g., "annoying" = mild, "blocking our launch" = blocker, "we had to shut down because" = showstopper)
+     - `wtpSignal`: any mention of price, budget, "I'd pay", "worth $X", current spending, or pricing complaints (null if none found)
+     - `selfPromo`: true | false | "suspected" — is the author promoting their own product?
+     - `selfPromoEvidence`: why you think this (string, null if selfPromo is false)
+
+     **Self-Promotion Detection Signals:**
+     - Author's username matches a company name → `true`
+     - Post contains a link to a product the author appears to work on → `true`
+     - "I built X" or "We just launched" framing → `true`
+     - Post history (if visible) is predominantly about one product → `suspected`
+     - The "pain point" conveniently matches exactly what their product solves → `suspected`
+     - Author links to their own product in comments → `suspected`
+     - Account is new and only posts about one product → `suspected`
+
+     Tag self-promo posts so synthesis can weight them lower. Real user pain > founder marketing.
+   - Extract `demandSignals` from the post content and comments:
+     ```json
+     "demandSignals": {
+       "volume": "any mention of quantity (e.g., '100/day', '50 agents', 'thousands of verifications') or null",
+       "frequency": "daily|weekly|monthly|one-time|null",
+       "pricePoint": "any mention of price/budget/spending (e.g., '$X/mo', 'currently paying $Y') or null",
+       "persistentVsDisposable": "does the user need persistent dedicated resources or one-time disposable? or null"
+     }
+     ```
+     Only populate fields where the post explicitly mentions these signals. Do NOT infer or fabricate demand data.
 
 8. Aggregate themes: count frequency, determine overall intensity, collect top evidence posts.
 
@@ -185,6 +212,8 @@ Write to `/tmp/gapscout-<scan-id>/scan-reddit.json`:
           "score": <upvotes>,
           "comments": <comment count>,
           "subreddit": "<subreddit>",
+          "selfPromo": "true|false|suspected",
+          "selfPromoEvidence": "<why you flagged this as self-promo, or null>",
           "credibility": {
             "score": "<0-100>",
             "tier": "HIGH|MEDIUM|LOW",
@@ -210,6 +239,17 @@ Write to `/tmp/gapscout-<scan-id>/scan-reddit.json`:
       "body": "<post body excerpt, max 500 chars>",
       "theme": "<assigned theme>",
       "intensity": "URGENT|ACTIVE|LATENT",
+      "authorContext": "developer|founder|enterprise|hobbyist|unknown",
+      "frustrationLevel": "mild|blocker|showstopper",
+      "wtpSignal": "<price/budget/WTP mention or null>",
+      "selfPromo": "true|false|suspected",
+      "selfPromoEvidence": "<why you flagged this as self-promo, or null>",
+      "demandSignals": {
+        "volume": "<quantity mention or null>",
+        "frequency": "daily|weekly|monthly|one-time|null",
+        "pricePoint": "<price/budget mention or null>",
+        "persistentVsDisposable": "<persistent|disposable|null>"
+      },
       "credibility": {
         "score": "<0-100>",
         "tier": "HIGH|MEDIUM|LOW",

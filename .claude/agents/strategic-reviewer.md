@@ -64,7 +64,8 @@ After all `opportunity-strategist` sub-agents complete, merge their outputs:
    - Identify conflicts (do any opportunities compete with each other for the same users?)
    - Recommend focus: which 1-2 opportunities have the highest strategic potential?
    - Identify the biggest blind spot across the entire report
-3. Write the final output file
+3. Select the best positioning recommendation from the sub-agents (for the #1 recommended-focus opportunity) and promote it to `topPositioningRecommendation` at the top level of the output
+4. Write the final output file
 
 ## Strategic Review Framework
 
@@ -116,6 +117,20 @@ If the opportunity should be reframed, provide:
 - **New search queries**: Queries the improvement planner should use to explore the reframed opportunity
 
 If the current framing is correct, set `shouldReframe: false` and skip the rest.
+
+### f. Positioning Recommendation
+
+For each opportunity, produce a **concrete, actionable positioning recommendation** — not abstract strategy, but specific enough to write a landing page and ad copy from:
+
+- **targetPersona**: The most specific buyer persona (e.g., "AI agent developers building autonomous account creation workflows at Series A startups" — NOT "developers" or "startups")
+- **positioning**: A one-sentence positioning statement suitable for a landing page hero (e.g., "Compliant real-SIM verification API for AI agents" — NOT "a tool that helps with verification")
+- **differentiator**: The single most defensible difference from existing solutions, grounded in evidence from the scan data
+- **priceRange**: Recommended pricing range based on WTP signals found in scan data (e.g., "$49-149/mo based on 12 WTP signals averaging $89/mo")
+- **goCommunity**: Where to find the first 100 users — specific subreddits, Discord servers, HN threads, Slack groups (e.g., "r/LocalLLaMA (450K members), AI Agent Discord (12K), Show HN: threads on agent infra")
+- **antiPositioning**: What NOT to be — the positioning traps to avoid (e.g., "not a SIM farm, not a gray-market verifier, not an enterprise-only platform")
+- **evidenceBasis**: Which specific scan findings support this positioning (reference citation IDs or evidence URLs)
+
+The positioning must be grounded in evidence. If a positioning element is speculative, label it as `"confidence": "hypothesis"` with a `validationQuery`.
 
 ## Build on Debates, Don't Repeat Them
 
@@ -181,6 +196,15 @@ Write to: `/tmp/gapscout-{scan-id}/strategic-review-round-{N}.json`
         "whatReframeUnlocks": "<why the new framing is better>",
         "newSearchQueries": ["<queries to explore the reframed opportunity>"]
       },
+      "positioningRecommendation": {
+        "targetPersona": "<most specific buyer persona>",
+        "positioning": "<one-sentence landing page positioning>",
+        "differentiator": "<single most defensible difference>",
+        "priceRange": "<recommended pricing with evidence basis>",
+        "goCommunity": "<where to find first 100 users — specific communities>",
+        "antiPositioning": "<what NOT to be>",
+        "evidenceBasis": "<which findings/citations support this>"
+      },
       "strategicConfidence": "HIGH|MEDIUM|LOW",
       "topInsight": "<single most important strategic insight for this opportunity>"
     }
@@ -190,6 +214,15 @@ Write to: `/tmp/gapscout-{scan-id}/strategic-review-round-{N}.json`
     "conflicts": ["<opportunities that compete with each other>"],
     "recommendedFocus": "<which 1-2 opportunities have the highest strategic potential>",
     "biggestBlindSpot": "<what the entire report is missing strategically>"
+  },
+  "topPositioningRecommendation": {
+    "targetPersona": "<persona for the #1 recommended opportunity>",
+    "positioning": "<positioning statement for the #1 recommended opportunity>",
+    "differentiator": "<key differentiator>",
+    "priceRange": "<pricing recommendation>",
+    "goCommunity": "<where to find early users>",
+    "antiPositioning": "<what NOT to be>",
+    "evidenceBasis": "<supporting evidence>"
   }
 }
 ```

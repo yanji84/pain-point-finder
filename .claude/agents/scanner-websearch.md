@@ -101,6 +101,33 @@ For each additional source in scan-spec.additionalSources, spawn a websearch sub
    - Instructions to use the **WebSearch tool** for each query
    - Instructions to compute a `credibility` object for each post/result (see Per-Post Credibility Scoring below)
    - Instructions to extract pain signals from search results: read snippets, identify complaint patterns, capture URLs
+   - Instructions to extract the following fields for raw findings passthrough on each result:
+     - `authorContext`: "developer" | "founder" | "enterprise" | "hobbyist" | "unknown" — infer from page content, author bio, domain context, and writing style (e.g., technical blog = developer, company blog = enterprise, personal blog = hobbyist, founder story = founder)
+     - `frustrationLevel`: "mild" | "blocker" | "showstopper" — infer from language intensity, urgency words, stated impact (e.g., "minor inconvenience" = mild, "blocking our migration" = blocker, "lost $X because of this" = showstopper)
+     - `wtpSignal`: any mention of price, budget, "I'd pay", "worth $X", current spending, or pricing complaints (null if none found)
+     - `selfPromo`: true | false | "suspected" — is the author promoting their own product?
+     - `selfPromoEvidence`: why you think this (string, null if selfPromo is false)
+
+     **Self-Promotion Detection Signals:**
+     - Page is a company blog post promoting their own alternative product → `true`
+     - Author links to their own product as the solution → `true`
+     - "I built X" or "We just launched" framing → `true`
+     - Affiliate links or referral codes present → `suspected`
+     - The "pain point" conveniently matches exactly what the author's product solves → `suspected`
+     - Sponsored content or partnership disclosure → `suspected`
+     - Author bio links to the product being recommended → `suspected`
+
+     Tag self-promo posts so synthesis can weight them lower. Real user pain > founder marketing.
+   - Instructions to extract `demandSignals` from each result:
+     ```json
+     "demandSignals": {
+       "volume": "any mention of quantity (e.g., '100/day', '50 agents', 'thousands of verifications') or null",
+       "frequency": "daily|weekly|monthly|one-time|null",
+       "pricePoint": "any mention of price/budget/spending (e.g., '$X/mo', 'currently paying $Y') or null",
+       "persistentVsDisposable": "does the user need persistent dedicated resources or one-time disposable? or null"
+     }
+     ```
+     Only populate fields where the source explicitly mentions these signals. Do NOT infer or fabricate demand data.
    - Output file path
 
 4. Wait for all sub-agent output files to appear:
@@ -172,6 +199,17 @@ Sub-agent output format (each file):
           "quote": "<snippet or title from search result>",
           "url": "<source URL>",
           "postTitle": "<page title if available>",
+          "authorContext": "developer|founder|enterprise|hobbyist|unknown",
+          "frustrationLevel": "mild|blocker|showstopper",
+          "wtpSignal": "<price/budget/WTP mention or null>",
+          "selfPromo": "true|false|suspected",
+          "selfPromoEvidence": "<why you flagged this as self-promo, or null>",
+          "demandSignals": {
+            "volume": "<quantity mention or null>",
+            "frequency": "daily|weekly|monthly|one-time|null",
+            "pricePoint": "<price/budget mention or null>",
+            "persistentVsDisposable": "<persistent|disposable|null>"
+          },
           "credibility": {
             "score": "<0-100>",
             "tier": "HIGH|MEDIUM|LOW",

@@ -60,12 +60,38 @@ Read these files from the scan directory:
 
 4. Deduplicate results by product slug or URL.
 
-5. For each product and its comments, classify into pain themes:
+5. For each product and its comments, extract demand signals and classify into pain themes:
    - Focus on negative comments, feature requests, and comparison discussions
    - Identify what users wish the product did differently
    - Extract switching signals ("I use X instead because...")
    - Rate intensity: URGENT, ACTIVE, or LATENT
    - Preserve the original Product Hunt URL
+   - Extract the following fields for raw findings passthrough:
+     - `authorContext`: "developer" | "founder" | "enterprise" | "hobbyist" | "unknown" — infer from commenter profile, maker badge status, and writing style (maker badge = founder, mentions of "my startup" = founder, technical detail = developer, casual usage = hobbyist)
+     - `frustrationLevel`: "mild" | "blocker" | "showstopper" — infer from language intensity, urgency words, stated impact (e.g., "would be nice" = mild, "dealbreaker for us" = blocker, "had to cancel and switch" = showstopper)
+     - `wtpSignal`: any mention of price, budget, "I'd pay", "worth $X", current spending, or pricing complaints (null if none found)
+     - `selfPromo`: true | false | "suspected" — is the author promoting their own product?
+     - `selfPromoEvidence`: why you think this (string, null if selfPromo is false)
+
+     **Self-Promotion Detection Signals:**
+     - Maker badge commenting on own product → `true`
+     - Hunter promoting a product they are affiliated with → `true`
+     - "I built this" or "We just launched" framing → `true`
+     - Comment author's profile links to the product being discussed → `suspected`
+     - Overly positive first comment from a new/low-follower account → `suspected`
+     - The comment reads like marketing copy rather than genuine feedback → `suspected`
+
+     Tag self-promo posts so synthesis can weight them lower. Real user pain > founder marketing.
+   - Extract `demandSignals` from comments and discussions:
+     ```json
+     "demandSignals": {
+       "volume": "any mention of quantity (e.g., '100/day', '50 agents', 'thousands of verifications') or null",
+       "frequency": "daily|weekly|monthly|one-time|null",
+       "pricePoint": "any mention of price/budget/spending (e.g., '$X/mo', 'currently paying $Y') or null",
+       "persistentVsDisposable": "does the user need persistent dedicated resources or one-time disposable? or null"
+     }
+     ```
+     Only populate fields where the comment explicitly mentions these signals. Do NOT infer or fabricate demand data.
 
 6. **Per-Post Credibility Scoring.** For every comment/post, compute a `credibility` object:
 
@@ -123,6 +149,14 @@ Write to `/tmp/gapscout-<scan-id>/scan-producthunt.json`:
           "url": "<Product Hunt URL>",
           "productName": "<product name>",
           "upvotes": <number>,
+          "selfPromo": "true|false|suspected",
+          "selfPromoEvidence": "<why you flagged this as self-promo, or null>",
+          "demandSignals": {
+            "volume": "<quantity mention or null>",
+            "frequency": "daily|weekly|monthly|one-time|null",
+            "pricePoint": "<price/budget mention or null>",
+            "persistentVsDisposable": "<persistent|disposable|null>"
+          },
           "credibility": {
             "score": "<0-100>",
             "tier": "HIGH|MEDIUM|LOW",
@@ -145,6 +179,11 @@ Write to `/tmp/gapscout-<scan-id>/scan-producthunt.json`:
       "upvotes": <number>,
       "commentCount": <number>,
       "painSignals": <number of pain-relevant comments>,
+      "authorContext": "developer|founder|enterprise|hobbyist|unknown",
+      "frustrationLevel": "mild|blocker|showstopper",
+      "wtpSignal": "<price/budget/WTP mention or null>",
+      "selfPromo": "true|false|suspected",
+      "selfPromoEvidence": "<why you flagged this as self-promo, or null>",
       "credibility": {
         "score": "<0-100>",
         "tier": "HIGH|MEDIUM|LOW",

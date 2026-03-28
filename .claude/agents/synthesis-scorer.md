@@ -52,6 +52,31 @@ Compute composite opportunity scores for each gap classified YES or PARTIAL in S
    - NEEDS EVIDENCE (40-59) — promising but needs more validation
    - TOO WEAK (<40) — insufficient evidence
 
+### Demand Quantification Aggregation
+
+Before scoring, aggregate all `demandSignals` from scan data files (scan-hn.json, scan-reddit.json, scan-websearch-*.json, scan-producthunt.json, scan-trustpilot.json) into a per-opportunity demand summary:
+
+1. **Collect all demandSignals** from rawPosts/evidence items across all scan files
+2. **Group by opportunity/gap** — match each signal to the opportunity it supports (via pain theme mapping)
+3. **Aggregate into a `demandQuantification` object per opportunity:**
+   ```json
+   "demandQuantification": {
+     "totalSignals": "<number of posts with at least one non-null demandSignal field>",
+     "volumeMentions": ["100/day from reddit", "50 agents from HN", ...],
+     "frequencyBreakdown": { "daily": N, "weekly": N, "monthly": N, "one-time": N },
+     "pricePoints": ["$X/mo from reddit", "$Y/yr from trustpilot", ...],
+     "medianPricePoint": "<calculated median if 3+ price mentions, else null>",
+     "persistentVsDisposable": { "persistent": N, "disposable": N, "unknown": N },
+     "demandIntensity": "HIGH|MEDIUM|LOW"
+   }
+   ```
+4. **demandIntensity scoring:**
+   - HIGH: 5+ volume/price signals with consistent frequency patterns
+   - MEDIUM: 2-4 signals or mixed frequency patterns
+   - LOW: 0-1 signals
+
+Include the `demandQuantification` object in the output for each opportunity alongside scores.
+
 ### Enhanced Scoring (v2)
 
 In addition to the base 5 dimensions, compute these advanced scores:
@@ -140,7 +165,16 @@ Write to: `/tmp/gapscout-<scan-id>/s6-scores.json`
       },
       "compositeScore": "<0-100 (original formula)>",
       "enhancedScore": "<0-100 (v2 formula with recency + trust + trend)>",
-      "verdict": "<VALIDATED|NEEDS_EVIDENCE|TOO_WEAK>"
+      "verdict": "<VALIDATED|NEEDS_EVIDENCE|TOO_WEAK>",
+      "demandQuantification": {
+        "totalSignals": "<N>",
+        "volumeMentions": ["<volume string from source>"],
+        "frequencyBreakdown": { "daily": "<N>", "weekly": "<N>", "monthly": "<N>", "one-time": "<N>" },
+        "pricePoints": ["<price string from source>"],
+        "medianPricePoint": "<calculated median or null>",
+        "persistentVsDisposable": { "persistent": "<N>", "disposable": "<N>", "unknown": "<N>" },
+        "demandIntensity": "HIGH|MEDIUM|LOW"
+      }
     }
   ]
 }

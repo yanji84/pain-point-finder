@@ -16,6 +16,7 @@ Before writing report.json, verify:
 2. **Opportunity scores**: Every opportunity in `rankedOpportunities` must have `score` > 0 (read from synthesis-6-opportunities.json)
 3. **Trust scores**: `competitiveMap.competitors` array must include `trustScore` (numeric) and `trustTier` (string) for each competitor
 4. **Founder data**: If synthesis-11-founder-profiles.json exists, include `founderProfiles` section
+5. **Raw findings**: Top-level `rawFindings` array must exist with >= 20 entries (or all available if fewer than 20 exist across scan files). Each entry must have `sourceUrl`, `platform`, `authorContext`, `frustrationLevel`, and `engagementScore`.
 
 If scores in synthesis-6-opportunities.json are stored in sub-fields (e.g., `compositeScore`, `enhancedScore`, `adjustedScore`), extract the HIGHEST available score. Never default to 0.
 
@@ -50,6 +51,12 @@ Read these files from `/tmp/gapscout-<scan-id>/`:
 - `community-validation.json` — community validation suggestions per opportunity (if exists)
 - `connection-index.json` — team LinkedIn connection index with network reach data (if exists)
 - `delta-summary.json` — delta comparison with previous scan (if exists, resume mode only)
+- `strategic-review-round-*.json` — strategic review outputs with positioning recommendations (if exists)
+- `scan-hn.json` — raw Hacker News scan data (for rawFindings extraction)
+- `scan-reddit.json` — raw Reddit scan data (for rawFindings extraction)
+- `scan-trustpilot.json` — raw Trustpilot scan data (for rawFindings extraction)
+- `scan-producthunt.json` — raw Product Hunt scan data (for rawFindings extraction)
+- `scan-websearch-*.json` — raw websearch scan data files (for rawFindings extraction)
 
 ## Task
 
@@ -93,7 +100,10 @@ Compile all synthesis outputs into a single structured report:
 18. **Market sizing** — from Sprint 13 (if synthesis-13-market-sizing.json exists): TAM/SAM/SOM per opportunity, pricing strategy, GTM recommendations
 19. **Causal chains** — from Sprint 14 (if synthesis-14-causal-chains.json exists): root cause analysis for top pain themes
 20. **Strategic narrative** — from Sprint 15 (if synthesis-15-strategic-narrative.json exists): market story, opportunity playbooks, contrarian insights, BUILD/WATCH/AVOID recommendations
-21. **Data quality** — QA scores and notes
+21. **Positioning recommendation** — from strategic-review data and synthesis: target persona, positioning statement, differentiator, price range, go-to community, anti-positioning, and evidence basis. Derive from the top-ranked opportunity's strategic review, WTP signals from synthesis-4-switching.json, and community data from community-validation.json.
+22. **Top demand signals** — Rank the top 20 most specific, high-engagement demand signals across all scan data. Read all scan-*.json files, extract posts/evidence with non-null `demandSignals`, and rank by a combination of specificity (explicit volume/price > vague mentions), pain level (showstopper > blocker > mild), and engagement (upvotes, comments, score). Include the top 20 in a `topDemandSignals` array.
+23. **Data quality** — QA scores and notes
+24. **Raw findings passthrough** — Read all scan-*.json files (scan-hn.json, scan-reddit.json, scan-trustpilot.json, scan-producthunt.json, scan-websearch-*.json). For each file, extract individual posts/reviews from `rawPosts`, `rawProducts`, `competitors.*.painPosts`, and `painThemes[].evidence` arrays. For each finding, extract or infer: sourceUrl, platform, date, authorContext, problemDescribed, currentSolution, frustrationLevel, wtpSignal, relevantQuotes, engagementScore. Sort all findings by engagementScore (upvotes/score) descending. Take top 30. Filter out any URLs appearing in watchdog-blocklist.json. Include as top-level `rawFindings` array in report.json.
 
 ## Inline Citations (Bibliography System)
 
@@ -284,6 +294,43 @@ Write to: `/tmp/gapscout-<scan-id>/report.json`
     "competitorDelta": {},
     "stats": {}
   },
+  "rawFindings": [
+    {
+      "sourceUrl": "https://exact-source-url",
+      "platform": "hackernews|reddit|trustpilot|producthunt|websearch",
+      "date": "2026-03-28",
+      "authorContext": "developer|founder|enterprise|hobbyist|unknown",
+      "problemDescribed": "1-2 sentence description of the problem or complaint",
+      "currentSolution": "what the author is currently using (null if not mentioned)",
+      "frustrationLevel": "mild|blocker|showstopper",
+      "wtpSignal": "any price/budget/willingness-to-pay mention (null if none)",
+      "relevantQuotes": ["exact quote from the post"],
+      "engagementScore": "<number — upvotes/score/points from the platform>"
+    }
+  ],
+  "topDemandSignals": [
+    {
+      "rank": 1,
+      "sourceUrl": "<direct URL to the source post/review>",
+      "platform": "reddit|hn|trustpilot|producthunt|websearch",
+      "date": "YYYY-MM-DD",
+      "specificity": "high|medium|low",
+      "painLevel": "showstopper|blocker|mild",
+      "engagementScore": "<N — upvotes/score/points>",
+      "summary": "one-line description of the demand signal",
+      "quote": "exact user words expressing demand",
+      "demandType": "<categorization of what the user needs>"
+    }
+  ],
+  "positioningRecommendation": {
+    "targetPersona": "who specifically to sell to (e.g., 'AI agent developers building autonomous account creation workflows')",
+    "positioning": "how to position the product (e.g., 'Compliant real-SIM verification API for AI agents')",
+    "differentiator": "what makes it different from existing solutions",
+    "priceRange": "recommended pricing based on WTP signals",
+    "goCommunity": "where to find early users (specific subreddits, Discord servers, HN threads)",
+    "antiPositioning": "what NOT to be (e.g., 'not a SIM farm, not a gray-market verifier')",
+    "evidenceBasis": "which findings support this positioning"
+  },
   "dataQuality": {
     "qaVerdict": "<PASS|MARGINAL|FAIL>",
     "compositeScore": <N>,
@@ -303,3 +350,4 @@ Write to: `/tmp/gapscout-<scan-id>/report.json`
 - **CITATION BLOCKLIST ENFORCEMENT**: If `watchdog-blocklist.json` exists, strip any URL appearing in `blockedCitations` from the final report. Replace with `"citationStatus": "REMOVED_BY_WATCHDOG"`. Report total removed count in `dataQuality.blockedCitationsRemoved`.
 - **SCHEMA STANDARDIZATION**: All synthesis sprint data MUST use these canonical sub-key names in the report: `painThemes` (not `painPoints` or `pains`), `unmetNeeds` (not `needs` or `gaps`), `switchingSignals` (not `switches` or `migrations`), `opportunities` (not `gaps` or `ideas`). If a synthesis file uses a variant name, map it to the canonical name.
 - **NETWORK REACH**: If `connection-index.json` does not exist, set `networkReach` to `null` in the report. Do not fabricate connection data.
+- **RAW FINDINGS EXTRACTION**: Read all scan-*.json files. Extract individual posts from `rawPosts` (HN, Reddit), `rawProducts` (PH), `competitors.*.painPosts` (Trustpilot), and `painThemes[].evidence` (all sources). For each post, populate: `sourceUrl` from `url`, `platform` from `source`/filename, `date` from `date`, `authorContext` from `authorContext` field (default "unknown" if missing), `problemDescribed` from `theme`+`quote`, `currentSolution` inferred from post content (null if not mentioned), `frustrationLevel` from `frustrationLevel` field (default "mild" if missing), `wtpSignal` from `wtpSignal` field (null if missing), `relevantQuotes` from `quote`, `engagementScore` from `score`/`upvotes`/`points`. Sort by engagementScore descending. Take top 30. Filter out blocklisted URLs.

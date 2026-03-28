@@ -36,6 +36,32 @@ Before writing report.html, you MUST verify ALL of these. If ANY check fails, fi
 - Show: founder names, backgrounds, funding raised, headcount trend, health signals
 - IF the file doesn't exist, show a note: "Founder profiles not available for this scan"
 
+### CHECK 6: Raw Findings Appendix
+- The report MUST include a collapsible "Raw Findings" appendix section after the Citation Index
+- It must contain a table with columns: Source | Date | Author Context | Problem | Current Solution | Frustration Level | WTP Signal | Quote
+- The table must have >= 20 rows (individual findings pulled from scan data files)
+- If fewer than 20 findings exist across all scan files, include all available findings and note the shortfall
+
+### CHECK 7: Citation Anchor Targets
+- Every `<a href="#ref-N">` superscript link MUST have a matching `<li id="ref-N">` in the bibliography section
+- The bibliography section MUST exist at the bottom of the report with real external URLs
+- Format: `<li id="ref-N"><a href="REAL_EXTERNAL_URL" target="_blank">Source Title — Domain</a></li>`
+- Count `id="ref-` occurrences — must equal the number of `href="#ref-` occurrences
+- If using inline external links `<a href="https://...">` instead of anchor references, that's also fine — but then DON'T generate orphan `#ref-N` links
+
+### CHECK 8: Self-Promo Badges in Raw Findings
+- If any raw finding has `selfPromo: true` or `selfPromo: "suspected"`, render an orange "SELF-PROMO" badge next to it in the Raw Findings table
+- Badge CSS: `background: #f59e0b; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;`
+- For `selfPromo: "suspected"`, use a lighter orange variant: `background: #fbbf24; color: #000;` with text "SUSPECTED SELF-PROMO"
+- Add a "Self-Promo" column to the Raw Findings table between "Author Context" and "Problem"
+- If selfPromoEvidence exists, show it as a tooltip (title attribute) on the badge
+
+### CHECK 9: Positioning Recommendation
+- If report.json has a `positioningRecommendation` object, the report MUST contain a "Recommended Positioning" section
+- The section MUST include: target persona, positioning statement (differentiator), and price range at minimum
+- The section must be linked from the TOC with id="positioning-recommendation"
+- If positioningRecommendation is null or missing, omit the section and its TOC entry
+
 # Report Generator (HTML)
 
 You are a LEAF AGENT in the GapScout pipeline. You do analytical work directly — you do NOT spawn sub-agents.
@@ -47,13 +73,14 @@ You are a LEAF AGENT in the GapScout pipeline. You do analytical work directly �
 ## Inputs
 
 Read these files from `/tmp/gapscout-<scan-id>/`:
-- `report.json` — the complete structured report
+- `report.json` — the complete structured report (includes `rawFindings` array)
 - `competitor-trust-scores.json` — competitor trust scores (if exists)
 - `scan-audit.json` — scan audit results (if exists)
 - `deep-research-summary.json` — deep research verification results (if exists)
 - `connection-index.json` — team LinkedIn connection index with network reach data (if exists)
 - `community-validation.json` — community validation with network outreach suggestions (if exists)
 - `delta-summary.json` — delta comparison with previous scan (if exists, resume mode only)
+- `scan-hn.json`, `scan-reddit.json`, `scan-trustpilot.json`, `scan-producthunt.json`, `scan-websearch-*.json` — raw scan data files (fallback for Raw Findings if report.json lacks `rawFindings`)
 
 ## Task
 
@@ -89,8 +116,11 @@ The HTML report MUST include a sticky/fixed Table of Contents for navigation. Th
     <li><a href="#founder-profiles">Founder Profiles</a></li>
     <li><a href="#community-validation">Community Validation</a></li>
     <li><a href="#network-reach">Network Reach</a></li>
+    <li><a href="#top-demand-signals">Top 20 Demand Signals</a></li>
     <li><a href="#data-quality">Data Quality</a></li>
     <li><a href="#citation-index">Citation Index</a></li>
+    <li><a href="#positioning-recommendation">Recommended Positioning</a></li>
+    <li><a href="#raw-findings">Raw Findings</a></li>
   </ol>
 </nav>
 ```
@@ -244,8 +274,40 @@ If `connection-index.json` exists and has connections, render a Network Reach se
 If connection-index.json does not exist, render a placeholder:
 "Upload your team's LinkedIn connections to enable network-based outreach suggestions. See: linkedin.com/help/linkedin/answer/a566336"
 
+   - **Recommended Positioning** (if report.json has positioningRecommendation): Render as a prominent card/section with id="positioning-recommendation":
+     - **Target Persona**: who specifically to sell to — displayed as a bold callout heading
+     - **Positioning Statement**: how to position the product — in a highlighted quote/blockquote block with accent left border
+     - **Differentiator**: what makes it different — with emphasis styling in a distinct card
+     - **Price Range**: recommended pricing based on WTP signals — in a green pricing badge/card
+     - **Go-to Community**: where to find early users (specific subreddits, Discord servers, HN threads) — as clickable links where possible, rendered as pill badges
+     - **Anti-Positioning**: what NOT to be — in a red/warning styled box with red left border
+     - **Evidence Basis**: which findings support this positioning — with inline citation links
+     - Style as a prominent card with a gradient accent border (e.g., left border gradient from blue to purple) to make it stand out as a key actionable output
+     - If positioningRecommendation is null or missing, omit this section entirely
+   - **Top 20 Demand Signals** (if report.json has topDemandSignals): Section with id="top-demand-signals" showing the 20 highest-signal demand data points across all sources. Render as a styled table with columns:
+     - **Rank**: Sequential 1-20
+     - **Platform**: Badge (HN/Reddit/Trustpilot/PH/Web) with link to source URL
+     - **Date**: Publication date
+     - **Specificity**: Color-coded badge — high(green), medium(yellow), low(gray)
+     - **Pain Level**: Color-coded badge — showstopper(red), blocker(orange), mild(gray)
+     - **Engagement**: Numeric score with bar visualization
+     - **Summary**: One-line demand description
+     - **Quote**: Exact user words in italics (max 200 chars, full quote in tooltip)
+     - **Demand Type**: Badge showing categorization
+     Style with alternating row colors. Add a summary callout at top showing: total demand signals found, median price point (if available), most common frequency pattern, and most common demand type. If topDemandSignals is missing or empty, omit this section.
    - **Scan Audit** (if scan-audit.json exists): Per-source data integrity table with PASS(green)/WARN(yellow)/FAIL(red) badges, post count discrepancies, provenance issues, query coverage gaps
    - **Data Quality**: QA scores table
+   - **Raw Findings** (MANDATORY appendix): Collapsible `<details>` section with id="raw-findings" containing individual post-level findings preserved from scan data. Pull from report.json `rawFindings` array (which is sourced from scan-hn.json, scan-reddit.json, scan-trustpilot.json, scan-producthunt.json, scan-websearch-*.json). Render as a responsive HTML table with columns:
+     - **Source**: Platform badge (HN/Reddit/Trustpilot/PH/Web) with link to original post
+     - **Date**: Publication date
+     - **Author Context**: Badge showing developer/founder/enterprise/hobbyist/unknown
+     - **Self-Promo**: If `selfPromo` is `true`, show an orange "SELF-PROMO" badge (`background: #f59e0b; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold;`). If `selfPromo` is `"suspected"`, show a lighter "SUSPECTED SELF-PROMO" badge (`background: #fbbf24`). If `selfPromoEvidence` exists, add it as a `title` tooltip on the badge. If `selfPromo` is `false` or absent, leave the cell empty.
+     - **Problem**: The core problem or complaint described
+     - **Current Solution**: What the author is currently using (if mentioned)
+     - **Frustration Level**: Color-coded badge — mild(gray), blocker(orange), showstopper(red)
+     - **WTP Signal**: Any willingness-to-pay indicator (price mentions, "I'd pay", budget references)
+     - **Quote**: Key verbatim quote from the post (max 200 chars, with full quote in tooltip)
+     Top 30 findings sorted by engagement score (upvotes/score). Each row links to the source URL. Style the table with alternating row colors and horizontal scroll on mobile. If rawFindings is missing or empty in report.json, read scan-*.json files directly from the scan directory as fallback.
    - **References (Bibliography)**: Numbered bibliography section at bottom of report. Each entry formatted as:
      `[N] "Quote excerpt..." — Source Type, Date. URL`
      Entries have alternating row colors for readability.
@@ -324,6 +386,10 @@ After generating the HTML string but BEFORE writing to disk, run these checks on
 2. Count occurrences of `<nav` — must be >= 1 (TOC)
 3. Search for `>0</` near score elements — must be 0 occurrences (no hardcoded zeros for scores)
 4. Search for `trust` or `Trust` — must appear in competitor table
-5. If any check fails, fix the HTML and re-check before writing
+5. Search for `id="raw-findings"` — must appear exactly once (Raw Findings appendix)
+6. Count `<tr>` elements inside the raw-findings section — must be >= 21 (header + 20 data rows minimum)
+7. Count `href="#ref-` occurrences and `id="ref-` occurrences — they must be equal (no orphan anchor links)
+8. If report.json has `positioningRecommendation`, search for `id="positioning-recommendation"` — must appear exactly once
+9. If any check fails, fix the HTML and re-check before writing
 
 Report your self-test results in your completion message.

@@ -593,8 +593,12 @@ Use this table to map scan-spec sources to scanner agent types. For ANY source i
 | appstore | scanner-websearch | leaf | websearch with site:apps.apple.com queries |
 | indiehackers | scanner-websearch | leaf | websearch with site:indiehackers.com queries |
 | discord-answeroverflow | scanner-websearch | leaf | websearch with site:answeroverflow.com queries |
+| answeroverflow | scanner-websearch | leaf | websearch with site:answeroverflow.com queries |
+| github-discussions | scanner-websearch | leaf | websearch with site:github.com/discussions queries |
 
 **If a scan-spec source has no dedicated scanner agent type, use scanner-websearch with appropriate site: queries as fallback.**
+
+**Discord communities → AnswerOverflow:** When scan-spec mentions Discord communities or servers as a source, use AnswerOverflow (answeroverflow.com) as the searchable archive. Discord messages are not directly indexable, but AnswerOverflow mirrors public Discord Q&A threads into a web-searchable format. Use `site:answeroverflow.com` queries via scanner-websearch to mine pain signals from Discord communities.
 
 **CRITICAL: Every source listed in scan-spec.scanningSpec.categoryB.sources MUST either be spawned or explicitly listed in categoryBSkip with a logged reason. No silent drops.**
 
