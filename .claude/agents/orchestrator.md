@@ -77,6 +77,8 @@ DRAFT 1 (lean) → CRITIQUE → DEBATE → IMPROVE → DRAFT 2 → CRITIQUE → 
 
 **Lean draft** cuts inner QA loops and late-stage synthesis sprints. The outer loop recovers this quality — and more — by directing effort where the critic says it's needed rather than spreading it uniformly.
 
+HTML is generated ONCE at the end. Intermediate iterations use JSON only. This saves ~30 min per iteration with zero impact on report quality.
+
 ### Full Single-Pass Mode
 
 Set `iterativeMode.enabled: false` in orchestration-config to run the original full pipeline with all QA checkpoints and all 15 synthesis sprints. Use this when you want one thorough pass instead of iterative refinement.
@@ -142,10 +144,9 @@ You (orchestrator)
 │   │   └── 5 parallel citation verifiers                               │
 │   │   Output: citation-links-*.json                                   │
 │   │                                                                   │
-│   ├── Phase 5-LEAN-RPT: DRAFT REPORT GENERATION                      │
-│   │   ├── report-generator-json                                       │
-│   │   └── report-generator-html                                       │
-│   │   Output: report.json, report.html (draft v1)                     │
+│   ├── Phase 5-LEAN-RPT: DRAFT REPORT GENERATION (JSON only)           │
+│   │   └── report-generator-json                                       │
+│   │   Output: report.json (draft v1)                                  │
 │   │                                                                   │
 │   ├── Phase 6: ITERATIVE REFINEMENT LOOP (max N iterations)          │
 │   │   │                                                               │
@@ -179,9 +180,8 @@ You (orchestrator)
 │   │   │  │   ├── New competitor profiling         │                    │
 │   │   │  │   └── Selective sprint re-runs         │                    │
 │   │   │  │                                        │                    │
-│   │   │  │ 6e. REGENERATE REPORT                 │                    │
-│   │   │  │   ├── report-generator-json            │                    │
-│   │   │  │   └── report-generator-html            │                    │
+│   │   │  │ 6e. REGENERATE REPORT (JSON only)      │                    │
+│   │   │  │   └── report-generator-json            │                    │
 │   │   │  │   Output: report.json v(N+1)           │                    │
 │   │   │  │                                        │                    │
 │   │   │  │ 6f. CONVERGENCE CHECK                 │                    │
@@ -228,9 +228,18 @@ You (orchestrator)
 
 ## How You Work
 
-### Step 0: Receive User Input
+### Step 0: Receive User Input & Setup
 
-User provides a market name, named competitors, or no input (HN frontpage mode).
+Parse the user's input to extract:
+- **market**: The market name/description (required)
+- **angles**: Specific research angles (optional). Look for phrases like "focus on X", "two angles: A and B", numbered research questions.
+- **prioritySources**: Source preferences (optional). Look for "search Reddit", "focus on HN", "check Discord".
+- **exclusions**: What to filter out (optional). Look for "not interested in X", "exclude Y", "ignore Z".
+- **specificCompetitors**: Named competitors (optional). Look for company names, URLs.
+- **context**: Any context about why they're scanning (optional). Look for "we're building", "evaluating whether to", "our team is".
+- **teamConnectionsDir**: Check if team-connections/ directory exists in scan dir with LinkedIn profile exports (Profile.csv, Positions.csv).
+
+Pass ALL of these to the planner agent in its prompt.
 
 Create the scan directory:
 ```bash
@@ -263,11 +272,52 @@ Save the returned task ID as `planning_task_id`.
 
 ### Step 1: Spawn Planner
 
-Spawn **planner** agent with the user's input. The planner spawns its own 4 research sub-agents in parallel.
+Spawn planner with ALL parsed user inputs:
+
+```
+Agent({
+  description: "Plan market scope",
+  subagent_type: "planner",
+  prompt: "Plan the scan for market: '{market}'.
+    Scan dir: {scan_dir}
+    {IF angles: 'User-specified research angles: {JSON.stringify(angles)}'}
+    {IF prioritySources: 'User wants to prioritize these sources: {prioritySources}'}
+    {IF exclusions: 'User wants to EXCLUDE: {exclusions}'}
+    {IF specificCompetitors: 'User specifically named these competitors: {specificCompetitors}'}
+    {IF context: 'User context: {context}'}
+    {IF teamConnectionsDir exists: 'Team LinkedIn exports available at: {teamConnectionsDir}. Parse for team background summary.'}
+  "
+})
+```
+
+The planner spawns its own 4 research sub-agents in parallel.
 
 Wait for: `/tmp/gapscout-<scan-id>/scan-spec.json` to be written.
 
-Read scan-spec.json. Make orchestration decisions:
+Read these files:
+- scan-spec.json (now includes seedCompetitors, userAngles, exclusions)
+- thesis.json (now informed by demand + market + team)
+- demand-probe.json (NEW — demand signal strength)
+- team-background-summary.json (NEW — if team data exists)
+
+**Demand-based scan calibration:**
+```
+IF demand-probe.json → demandSignalStrength == "NONE":
+  Log WARNING: "No demand signals found. Proceeding with lightweight scan."
+  Reduce scanning timeout to 30 min
+  Skip Category A coordinators (reviews likely empty)
+  Note in orchestration-config: "demandSignalStrength": "NONE"
+
+IF demand-probe.json → demandSignalStrength == "WEAK":
+  Log: "Weak demand signals. Running standard scan but expect thin results."
+  Reduce rate budgets by 50%
+
+IF demand-probe.json → demandSignalStrength == "STRONG" or "MODERATE":
+  Log: "Demand validated ({N} signals). Full scan."
+  Proceed normally
+```
+
+Make orchestration decisions:
 
 ```
 IF competitiveDensity == "crowded" (50+ competitors):
@@ -303,6 +353,16 @@ Save your orchestration config to `/tmp/gapscout-<scan-id>/orchestration-config.
   "scanId": "<id>",
   "market": "<market>",
   "density": "sparse|moderate|crowded",
+  "userInput": {
+    "angles": [],
+    "prioritySources": [],
+    "exclusions": [],
+    "specificCompetitors": [],
+    "context": ""
+  },
+  "demandSignalStrength": "STRONG|MODERATE|WEAK|NONE",
+  "teamBackground": { "available": false, "summary": "" },
+  "marketMaturity": "nascent|growing|mature",
   "resumeMode": {
     "enabled": false,
     "previousScanDir": null,
@@ -395,6 +455,10 @@ Based on orchestration-config.json, spawn the discovery team **in a single messa
 2. **`profile-scraper`** — Always spawn. Tell it the batch size from your config.
 3. **`subreddit-discoverer`** — Always spawn. If sparse market, tell it to skip sub-agent spawning and work solo.
 4. **`query-generator`** — Always spawn. If <15 competitors expected, tell it to work solo.
+   ```
+   {IF scan-spec has userAngles:
+     "User specified these research angles — create dedicated query categories for each: {userAngles}. The user's search terms should be included AS-IS alongside auto-generated queries."}
+   ```
 
 All agents receive:
 - Path to scan-spec.json
@@ -667,6 +731,11 @@ All agents receive:
 - scan-spec.json
 - orchestration-config.json (so they know their rate budget)
 - competitor-map, profiles, subreddits, queries from discovery
+
+```
+{IF orchestration-config has exclusions:
+  "EXCLUSION FILTER: Ignore/filter out any content matching these patterns: {exclusions}. These are user-specified topics that are out of scope."}
+```
 
 Wait for: `/tmp/gapscout-<scan-id>/stage-complete-scanning.json`
 
@@ -1060,27 +1129,20 @@ TaskCreate({ description: "Phase 5-LEAN-RPT: Generating draft report v1", status
 ```
 Save the returned task ID as `draft_report_task_id`.
 
-### Step 8-LEAN-RPT: Generate Draft Report v1
+### Step 8-LEAN-RPT: Generate Draft Report v1 (JSON only)
 
-Spawn report generators (JSON + HTML only, skip summary presenter for now):
+Generate JSON report only. Do NOT spawn report-generator-html here — no iteration agent reads HTML. HTML is generated ONCE in Step 8-FINAL after the loop converges. This saves ~30 minutes per iteration.
 
 ```
 Agent({
   description: "Generate draft report JSON",
   subagent_type: "report-generator-json",
   prompt: "Generate draft v1 report. Note: this is a lean draft with 7 synthesis sprints (1-6 + 11). Sprints 7-10, 12-15 were deferred. Mark report as 'draft_iteration: 1'. Scan dir: {scan_dir}",
-  run_in_background: true
-})
-
-Agent({
-  description: "Generate draft report HTML",
-  subagent_type: "report-generator-html",
-  prompt: "Generate draft v1 HTML report. Include iteration badge showing 'Draft 1'. Scan dir: {scan_dir}",
-  run_in_background: true
+  run_in_background: false
 })
 ```
 
-Wait for both to complete.
+Wait for completion.
 
 ```
 TaskUpdate({ id: draft_report_task_id, status: "completed" })
@@ -1268,23 +1330,19 @@ WHILE outer_iteration < max_outer_iterations:
     ```
 
   Re-run citation verification (5 parallel agents) to pick up all new evidence.
-  Then regenerate the report:
+  Then regenerate report JSON only (HTML deferred to Step 8-FINAL):
 
   Agent({
-    description: "Regenerate report — iteration {outer_iteration+2}",
+    description: "Regenerate report JSON — iteration {outer_iteration+2}",
     subagent_type: "report-generator-json",
     prompt: "Regenerate report with all new evidence from iteration {outer_iteration+1}. Update draft_iteration to {outer_iteration+2}. Include all new citations from targeted scans, debates, and citation expansion. Scan dir: {scan_dir}",
-    run_in_background: true
+    run_in_background: false
   })
 
-  Agent({
-    description: "Regenerate HTML report — iteration {outer_iteration+2}",
-    subagent_type: "report-generator-html",
-    prompt: "Regenerate HTML report. Draft iteration: {outer_iteration+2}. Include iteration history section showing how conclusions evolved. Scan dir: {scan_dir}",
-    run_in_background: true
-  })
+  NOTE: Do NOT spawn report-generator-html during iterations. No iteration agent reads HTML.
+  HTML is generated ONCE in Step 8-FINAL after the loop converges. This saves ~30 min per iteration.
 
-  Wait for both.
+  Wait for completion.
 
   **VERIFY citation expansion:**
   ```
@@ -1350,16 +1408,25 @@ TaskCreate({ description: "Phase 7: Generating final report + summary", status: 
 ```
 Save as `final_report_task_id`.
 
-Spawn the summary presenter (skipped during lean drafts):
+Spawn HTML report + summary presenter in parallel. This is the ONLY HTML generation in the entire pipeline — all iterations operated on JSON only.
 
 ```
+Agent({
+  description: "Generate FINAL HTML report",
+  subagent_type: "report-generator-html",
+  prompt: "Generate the FINAL HTML report from report.json. This is the only HTML generation — all iterations operated on JSON only. Include full iteration history, thesis evolution, all citations. Scan dir: {scan_dir}",
+  run_in_background: true
+})
+
 Agent({
   description: "Generate executive summary",
   subagent_type: "report-summary",
   prompt: "Produce executive summary of the final report. Include iteration history showing how the report evolved across {outer_iteration+1} drafts. Scan dir: {scan_dir}",
-  run_in_background: false
+  run_in_background: true
 })
 ```
+
+Wait for both to complete.
 
 Also spawn delta-summarizer for ALL iterative scans — comparing v1 lean draft (or v0 resume baseline) to the final report. In resume mode, this shows what changed vs the original report. In fresh scans, this shows how the lean draft evolved through iterations.
 

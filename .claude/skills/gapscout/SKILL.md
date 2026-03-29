@@ -15,10 +15,56 @@ You are the ONLY agent that owns stage transitions. All other agents report comp
 
 ## Step 0: Parse Input & Setup
 
-Parse the user's input from `$ARGUMENTS` to determine the mode:
-- **Mode A — Market/category**: e.g., "project management tools" → full market scan
-- **Mode B — Named competitors**: e.g., "Jira, Asana, Linear" → competitor weakness scan
-- **Mode C — No input**: scan HN frontpage → suggest trending markets → user picks one
+### 0a: Parse structured fields from free text
+
+Parse the user's input from `$ARGUMENTS` into these structured fields:
+
+1. **market** (required) — The core market name. Everything that is NOT an angle, source preference, exclusion, or named competitor. Examples: "project management tools", "pokemon TCG market", "real SIM card infrastructure for AI agents".
+
+2. **angles** — Research angles or focus areas. Look for these patterns:
+   - "focus on X and Y"
+   - "two angles: A, B" / "three angles: ..."
+   - "specifically interested in..."
+   - Numbered research questions ("1. How do they handle X? 2. What about Y?")
+   - "from the perspective of..."
+   Extract each as `{ name, description, searchTerms[] }`.
+
+3. **prioritySources** — Sources the user wants emphasized. Look for:
+   - "search Reddit/HN/Discord"
+   - "focus on [source]" / "especially [source]"
+   - "check [platform]"
+   - "look at [source] and [source]"
+   Valid sources: `reddit`, `hn`, `google`, `ph`, `reviews`, `kickstarter`, `appstore`, `trustpilot`, `github`, `stackoverflow`, `discord`
+
+4. **exclusions** — Things to filter out. Look for:
+   - "not interested in X"
+   - "exclude Y" / "excluding Y"
+   - "ignore Z"
+   - "don't look at..." / "skip..."
+   - "no [topic]"
+
+5. **specificCompetitors** — Named companies or products. Look for:
+   - Company names with URLs (e.g., "check out Acme (acme.com)")
+   - "compare X, Y, Z" / "versus X, Y, Z"
+   - "competitors include..." / "like X and Y"
+   - Any capitalized proper nouns that are clearly product/company names
+   Extract each as `{ name, url? }`.
+
+6. **context** — Everything else that provides strategic context:
+   - "we're building..." / "we are a..."
+   - "evaluating whether to..." / "deciding if..."
+   - "our team has experience in..."
+   - "budget is..." / "timeline is..."
+   - Background info that does not fit the other fields
+
+### 0b: Determine mode
+
+Based on the parsed **market** field:
+- **Mode A — Market/category**: e.g., "project management tools" -> full market scan
+- **Mode B — Named competitors**: e.g., "Jira, Asana, Linear" with no market description -> competitor weakness scan
+- **Mode C — No input**: `$ARGUMENTS` is empty -> scan HN frontpage -> suggest trending markets -> user picks one
+
+### 0c: Generate scan ID and directory
 
 Generate a scan ID: `gapscout-<market-slug>-<date>` (e.g., `gapscout-pokemon-tcg-20260324`)
 
@@ -27,11 +73,80 @@ Create the scan directory:
 mkdir -p /tmp/gapscout-<scan-id>/
 ```
 
+### 0d: Check for team LinkedIn connections
+
+Check for team LinkedIn connection data from two sources:
+
+1. **GapScout web server DB** — Run:
+   ```bash
+   node -e "
+     import { openDb, getConnectionMembers, exportConnectionsForScan } from '/root/gapscout/server/db.mjs';
+     import { mkdirSync, writeFileSync } from 'fs';
+     const db = openDb();
+     const members = getConnectionMembers(db);
+     if (members.length > 0) {
+       const dir = '/tmp/gapscout-<scan-id>/team-connections';
+       mkdirSync(dir, { recursive: true });
+       for (const name of members) {
+         const rows = exportConnectionsForScan(db, name);
+         const csv = 'First Name,Last Name,Email Address,Company,Position,Connected On\n' +
+           rows.map(r => [r.first_name,r.last_name,r.email,r.company,r.position,r.connected_on].join(',')).join('\n');
+         writeFileSync(dir + '/' + name.replace(/\s+/g, '-') + '.csv', csv);
+       }
+       console.log(JSON.stringify({ found: true, members, dir }));
+     } else {
+       console.log(JSON.stringify({ found: false }));
+     }
+   "
+   ```
+
+2. **Local team directory** — Check if `/root/gapscout/team/` exists with CSV files:
+   ```bash
+   ls /root/gapscout/team/*.csv 2>/dev/null
+   ```
+   If found and no DB connections were exported, copy them:
+   ```bash
+   mkdir -p /tmp/gapscout-<scan-id>/team-connections/
+   cp /root/gapscout/team/*.csv /tmp/gapscout-<scan-id>/team-connections/
+   ```
+
+Set `teamConnectionsDir` to `/tmp/gapscout-<scan-id>/team-connections/` if any connections were found, otherwise `null`.
+
+### 0e: Write parsed input and create progress task
+
+Save the parsed input to `{scanDir}/parsed-input.json`:
+```json
+{
+  "raw": "<original $ARGUMENTS>",
+  "market": "<extracted market name>",
+  "mode": "market|competitors|hn-frontpage",
+  "angles": [{ "name": "...", "description": "...", "searchTerms": ["..."] }],
+  "prioritySources": ["reddit", "hn"],
+  "exclusions": ["spam use cases"],
+  "specificCompetitors": [{ "name": "Acme", "url": "acme.com" }],
+  "context": "We're building a ...",
+  "teamConnectionsDir": "/tmp/gapscout-<scan-id>/team-connections/"
+}
+```
+
 Create the first progress task:
 ```
 TaskCreate({ description: "Phase 1: Planning market scope", status: "in_progress" })
 ```
 Save the returned task ID as `planning_task_id`.
+
+### 0f: Pass ALL parsed fields to the planner
+
+When spawning the planner in Step 1, pass every parsed field explicitly in the prompt:
+- `market` (required)
+- `angles` (if any)
+- `prioritySources` (if any)
+- `exclusions` (if any)
+- `specificCompetitors` (if any)
+- `context` (if any)
+- `teamConnectionsDir` (if connections found)
+
+These fields map directly to the planner's optional input parameters — pass them as structured JSON in the planner's prompt so it does not need to re-parse free text.
 
 ## CRITICAL: You Are a Coordinator
 
