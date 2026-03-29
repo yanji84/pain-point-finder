@@ -192,7 +192,7 @@ Comprehensive list of bugs, problems, and improvement opportunities discovered d
 
 ### 20. No per-scan directory
 - **Severity:** MEDIUM
-- **Status:** RESOLVED — confirmed fixed in scan 4703d82c (home espresso machines, 2026-03-27). Scan data now written to `/root/gapscout/data/scans/<scan-id>/` with full isolation.
+- **Status:** RESOLVED — confirmed fixed in scan 4703d82c (home espresso machines, 2026-03-27). Scan data now written to `data/scans/<scan-id>/` with full isolation.
 - **Description:** All scan data goes to flat `/tmp/gapscout-*.json` files. Old scan data can mix with new scan data. No scan ID isolation.
 
 ### 21. No checkpoint/resume

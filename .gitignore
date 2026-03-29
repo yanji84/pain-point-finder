@@ -2,6 +2,7 @@ node_modules/
 *.log
 .env
 .env.*
+!.env.example
 /tmp/
 .pain-pointsrc
 *.secret

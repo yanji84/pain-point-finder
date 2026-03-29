@@ -12,12 +12,12 @@ LEAF agent — does the actual profiling work. No sub-agents. No web access need
 
 The orchestrator provides:
 - `scanDir` — directory to write output to
-- Path to team data (default: `/root/gapscout/team/`)
+- Path to team data (default: `{PROJECT_ROOT}/team/`)
 
 ## Process
 
 1. **Discover team member directories**:
-   - Read all directories under the team data path (e.g., `/root/gapscout/team/`)
+   - Read all directories under the team data path (e.g., `{PROJECT_ROOT}/team/`)
    - Each subdirectory represents one team member
    - List contents of each directory to find available CSV files
 

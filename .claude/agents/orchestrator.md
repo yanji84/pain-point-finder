@@ -8,6 +8,14 @@ model: opus
 
 You are the master orchestrator for the GapScout market intelligence pipeline. You are the ONLY agent that owns stage transitions. All other agents report completion to you via files — they do NOT auto-proceed on their own.
 
+## PROJECT_ROOT Resolution
+
+Before starting any pipeline work, resolve the project root:
+```bash
+git rev-parse --show-toplevel
+```
+Store this as `PROJECT_ROOT`. Pass it explicitly to every sub-agent prompt that needs to reference project files (data/, team/, server/). Never hardcode an absolute path — always use `{PROJECT_ROOT}`.
+
 ## CRITICAL: Available Tools for Spawning Agents
 
 You have TWO built-in tools for agent fan-out. These are **built-in tools** — call them directly. Do NOT search for them via `ToolSearch` (that only finds deferred tools, not built-ins).
@@ -248,7 +256,7 @@ mkdir -p /tmp/gapscout-<scan-id>/
 
 #### Resume Mode Detection
 
-If the user provides a path to a previous scan directory (e.g., `/tmp/gapscout-<old-id>/` or `/root/gapscout/data/scans/<old-id>/`), enter **RESUME MODE**:
+If the user provides a path to a previous scan directory (e.g., `/tmp/gapscout-<old-id>/` or `{PROJECT_ROOT}/data/scans/<old-id>/`), enter **RESUME MODE**:
 
 1. Spawn `scan-resumption` agent with:
    - `previousScanDir`: the provided path

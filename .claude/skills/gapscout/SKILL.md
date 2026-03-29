@@ -15,6 +15,14 @@ You are the ONLY agent that owns stage transitions. All other agents report comp
 
 ## Step 0: Parse Input & Setup
 
+### 0-pre: Resolve PROJECT_ROOT
+
+Before anything else, determine the project root directory. Run:
+```bash
+git rev-parse --show-toplevel
+```
+Store the result as `PROJECT_ROOT`. All paths below use `{PROJECT_ROOT}` — never hardcode `/root/gapscout/`.
+
 ### 0a: Parse structured fields from free text
 
 Parse the user's input from `$ARGUMENTS` into these structured fields:
@@ -69,7 +77,7 @@ Based on the parsed **market** field:
 
 When Mode D is detected:
 
-1. Create scan directory: `/root/gapscout/data/ideas/{YYYY-MM-DD-HHmmss}/`
+1. Create scan directory: `{PROJECT_ROOT}/data/ideas/{YYYY-MM-DD-HHmmss}/`
 2. Check for `--auto` flag in arguments (enables auto-scan of top idea)
 3. Check for `--scan-top=N` flag (how many ideas to auto-scan, default 1)
 4. Read the idea-generator agent definition and execute its pipeline:
@@ -114,7 +122,7 @@ Check for team LinkedIn connection data from two sources:
 1. **GapScout web server DB** — Run:
    ```bash
    node -e "
-     import { openDb, getConnectionMembers, exportConnectionsForScan } from '/root/gapscout/server/db.mjs';
+     import { openDb, getConnectionMembers, exportConnectionsForScan } from '{PROJECT_ROOT}/server/db.mjs';
      import { mkdirSync, writeFileSync } from 'fs';
      const db = openDb();
      const members = getConnectionMembers(db);
@@ -134,14 +142,14 @@ Check for team LinkedIn connection data from two sources:
    "
    ```
 
-2. **Local team directory** — Check if `/root/gapscout/team/` exists with CSV files:
+2. **Local team directory** — Check if `{PROJECT_ROOT}/team/` exists with CSV files:
    ```bash
-   ls /root/gapscout/team/*.csv 2>/dev/null
+   ls {PROJECT_ROOT}/team/*.csv 2>/dev/null
    ```
    If found and no DB connections were exported, copy them:
    ```bash
    mkdir -p /tmp/gapscout-<scan-id>/team-connections/
-   cp /root/gapscout/team/*.csv /tmp/gapscout-<scan-id>/team-connections/
+   cp {PROJECT_ROOT}/team/*.csv /tmp/gapscout-<scan-id>/team-connections/
    ```
 
 Set `teamConnectionsDir` to `/tmp/gapscout-<scan-id>/team-connections/` if any connections were found, otherwise `null`.

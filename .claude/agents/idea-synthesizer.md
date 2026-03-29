@@ -18,7 +18,7 @@ Read these files from the scan directory (passed in your prompt):
 - `reddit-signals.json` — subreddit pain/demand signals (from idea-reddit-scanner)
 - `web-signals.json` — broad web pain/demand signals (from idea-web-scanner)
 
-For dedup, glob for: `/root/gapscout/data/ideas/*/validated-ideas.json`
+For dedup, glob for: `{PROJECT_ROOT}/data/ideas/*/validated-ideas.json`
 
 ## Task
 
@@ -109,7 +109,7 @@ For each high-scoring cluster (top 10-15 by combined demand + team-fit), generat
 
 ### Step 5: Dedup Against Existing Ideas
 
-Read all `/root/gapscout/data/ideas/*/validated-ideas.json` files.
+Read all `{PROJECT_ROOT}/data/ideas/*/validated-ideas.json` files.
 
 For each new candidate, check if a semantically similar idea already exists:
 - Same market/problem space

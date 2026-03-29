@@ -12,13 +12,13 @@ LEAF agent — does the actual mining work. No sub-agents. No web access needed 
 
 The orchestrator provides:
 - `scanDir` — directory to write output to
-- Path pattern for historical scans (default: `/root/gapscout/data/scans/*/report.json`)
+- Path pattern for historical scans (default: `{PROJECT_ROOT}/data/scans/*/report.json`)
 
 ## Process
 
 1. **Discover historical scan reports**:
-   - Glob for all `/root/gapscout/data/scans/*/report.json` files
-   - Also check for `/root/gapscout/data/scans/*/report.html` as a fallback indicator
+   - Glob for all `{PROJECT_ROOT}/data/scans/*/report.json` files
+   - Also check for `{PROJECT_ROOT}/data/scans/*/report.html` as a fallback indicator
    - Sort by modification date (most recent first)
    - If no reports found, write an empty output file and stop
 
