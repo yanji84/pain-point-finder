@@ -1055,12 +1055,27 @@ All report generators receive (in addition to existing files):
 - citation-links-community.json
 ```
 
-After report.html is generated, verify it has inline links:
+After report.html is generated, run a structural verification:
 ```
-VERIFY: grep -c '<a href=' report.html > 100
-IF link count < 100:
-  Log WARNING: "Report has insufficient inline citations"
-  Consider re-running report-generator-html with explicit citation instructions
+VERIFY report.json schema:
+  - Has top-level 'citations' array with >= 30 entries
+  - Uses canonical field names: painThemes, unmetNeeds, switchingSignals, topOpportunities
+  - Has 'thesis' field with thesisConnection on each section
+  - Every opportunity has citationIds array
+  IF any check fails:
+    Log ERROR: "report.json schema mismatch — re-running with definition-first prompt"
+    Re-run report-generator-json with: "FIRST: Read .claude/agents/report-generator-json.md"
+
+VERIFY report.html structure:
+  - grep -c '<sup>' report.html >= 50 (inline citations)
+  - grep -c 'id="cite-' report.html >= 30 (bibliography entries)
+  - Has exactly 6 numbered sections + appendix (IDs: executive-summary, competitive-landscape, unmet-needs-pain, top-opportunities, risks, next-steps, appendix)
+  - No "data not available" or "Unknown Opportunity" placeholders
+  - Competitive landscape table has data rows (not empty tbody)
+  - grep -c '<a href=' report.html >= 50
+  IF any check fails:
+    Log ERROR: "report.html structure failure — re-running with definition-first prompt"
+    Re-run report-generator-html with: "FIRST: Read .claude/agents/report-generator-html.md"
 ```
 
 ### Step 7a: Branch — Iterative Draft Mode vs Full Single-Pass
@@ -1133,11 +1148,13 @@ Save the returned task ID as `draft_report_task_id`.
 
 Generate JSON report only. Do NOT spawn report-generator-html here — no iteration agent reads HTML. HTML is generated ONCE in Step 8-FINAL after the loop converges. This saves ~30 minutes per iteration.
 
+**CRITICAL: Schema compliance.** The report-generator-json agent MUST read its own agent definition file to get the correct JSON schema. The prompt MUST include the instruction to read the definition first. Without this, the agent will use an outdated schema that causes downstream failures in HTML generation (empty sections, missing citations, wrong field names).
+
 ```
 Agent({
   description: "Generate draft report JSON",
   subagent_type: "report-generator-json",
-  prompt: "Generate draft v1 report. Note: this is a lean draft with 7 synthesis sprints (1-6 + 11). Sprints 7-10, 12-15 were deferred. Mark report as 'draft_iteration: 1'. Scan dir: {scan_dir}",
+  prompt: "FIRST: Read your agent definition at .claude/agents/report-generator-json.md — it contains the EXACT JSON schema you must follow. Use canonical field names (painThemes, unmetNeeds, switchingSignals, topOpportunities). Include a top-level citations array (min 30 entries) with citationIds on every evidence-bearing field. Include thesis field with thesisConnection on each section. Generate draft v1 report. Note: this is a lean draft with 7 synthesis sprints (1-6 + 11). Sprints 7-10, 12-15 were deferred. Mark report as 'draft_iteration: 1'. Scan dir: {scan_dir}",
   run_in_background: false
 })
 ```
@@ -1335,7 +1352,7 @@ WHILE outer_iteration < max_outer_iterations:
   Agent({
     description: "Regenerate report JSON — iteration {outer_iteration+2}",
     subagent_type: "report-generator-json",
-    prompt: "Regenerate report with all new evidence from iteration {outer_iteration+1}. Update draft_iteration to {outer_iteration+2}. Include all new citations from targeted scans, debates, and citation expansion. Scan dir: {scan_dir}",
+    prompt: "FIRST: Read your agent definition at .claude/agents/report-generator-json.md — it contains the EXACT JSON schema you must follow. Use canonical field names (painThemes, unmetNeeds, switchingSignals, topOpportunities). Include a top-level citations array (min 30 entries) with citationIds on every evidence-bearing field. Include thesis field with thesisConnection on each section. Regenerate report with all new evidence from iteration {outer_iteration+1}. Update draft_iteration to {outer_iteration+2}. Include all new citations from targeted scans, debates, and citation expansion. Scan dir: {scan_dir}",
     run_in_background: false
   })
 
@@ -1410,11 +1427,13 @@ Save as `final_report_task_id`.
 
 Spawn HTML report + summary presenter in parallel. This is the ONLY HTML generation in the entire pipeline — all iterations operated on JSON only.
 
+**CRITICAL: The HTML agent MUST read its own agent definition first.** Without this, it generates an outdated 12-section layout instead of the correct 6-section thesis-threaded structure, and fails to render inline citations. The prompt MUST include the instruction to read the definition first and run self-test checks before writing.
+
 ```
 Agent({
   description: "Generate FINAL HTML report",
   subagent_type: "report-generator-html",
-  prompt: "Generate the FINAL HTML report from report.json. This is the only HTML generation — all iterations operated on JSON only. Include full iteration history, thesis evolution, all citations. Scan dir: {scan_dir}",
+  prompt: "FIRST: Read your agent definition at .claude/agents/report-generator-html.md — it contains the EXACT HTML structure, citation format, and self-test checklist you must follow. Generate the FINAL HTML report from report.json. Structure: 6 numbered thesis-threaded sections + collapsed appendix. Citations: inline <sup><a href='#cite-N'>[N]</a></sup> with matching bibliography entries (minimum 50 inline links). Run ALL self-test checks before writing. This is the only HTML generation — all iterations operated on JSON only. Include full iteration history, thesis evolution, all citations. Scan dir: {scan_dir}",
   run_in_background: true
 })
 
@@ -1512,9 +1531,11 @@ When `iterativeMode.enabled == false`, the pipeline runs the original full singl
 
 ### Step 8: Spawn Report Generation Team
 
+**CRITICAL: Schema and structure compliance.** Every report generator MUST read its own agent definition file FIRST before generating output. The prompt for each agent MUST include this instruction. Without it, agents use outdated schemas and structures, causing empty sections, missing citations, and wrong field names. This is the #1 cause of report quality failures.
+
 Spawn **in a single message** (parallel):
-1. **`report-generator-json`** — Generates report.json
-2. **`report-generator-html`** — Generates report.html
+1. **`report-generator-json`** — Generates report.json. Prompt MUST include: "FIRST: Read your agent definition at .claude/agents/report-generator-json.md — it contains the EXACT JSON schema you must follow."
+2. **`report-generator-html`** — Generates report.html. Prompt MUST include: "FIRST: Read your agent definition at .claude/agents/report-generator-html.md — it contains the EXACT HTML structure, citation format, and self-test checklist you must follow."
 3. **`report-summary-presenter`** — Produces executive summary
 
 All report generators receive:
