@@ -13,6 +13,8 @@ Examples:
 - `/gapscout project management tools`
 - `/gapscout Jira, Asana, Linear, Monday`
 - `/gapscout` (no input → suggests markets from HN frontpage)
+- `/gapscout ideas` (generate team-fit ideas from trending signals)
+- `/gapscout ideas --auto` (generate + auto-scan top idea)
 
 ## Team LinkedIn Connections (Optional)
 
@@ -61,6 +63,22 @@ orchestrator (single brain, owns all stage transitions)
 Resume mode: previous report → draft v0 → enters loop at critique step
 ```
 
+### Ideas Mode (`/gapscout ideas`)
+
+```
+idea-generator (single brain, owns all phase transitions)
+  ├── team-profiler (reads team/ LinkedIn exports → team-dna.json)
+  ├── scan-miner (reads historical report.json files → scan-intelligence.json)
+  ├── trend harvesters (4 parallel):
+  │   ├── github-trending-scanner (GitHub trending repos)
+  │   ├── hn-trend-scanner (HN frontpage + Show HN + Ask HN)
+  │   ├── idea-reddit-scanner (pain signals from key subreddits)
+  │   └── idea-web-scanner (broad web search for emerging needs)
+  ├── idea-synthesizer (cross-references signals × team DNA → candidates)
+  ├── idea-validator ×N (automated office-hours filter per candidate)
+  └── auto-scan trigger (top idea → /gapscout full pipeline)
+```
+
 ### Full Single-Pass Mode (set `iterativeMode.enabled: false`)
 
 ```
@@ -94,6 +112,15 @@ orchestrator
 | scan-auditor | `.claude/agents/scan-auditor.md` | Post-scan data integrity validation |
 | deep-research-verifier | `.claude/agents/deep-research-verifier.md` | Iterative opportunity verification |
 | community-validator | `.claude/agents/community-validator.md` | Community validation suggestions per opportunity |
+| github-trending-scanner | `.claude/agents/github-trending-scanner.md` | GitHub trending repos scanner |
+| hn-trend-scanner | `.claude/agents/hn-trend-scanner.md` | HN trends and pain signals |
+| idea-generator | `.claude/agents/idea-generator.md` | Ideas pipeline orchestrator |
+| idea-reddit-scanner | `.claude/agents/idea-reddit-scanner.md` | Reddit pain signal scanner |
+| idea-synthesizer | `.claude/agents/idea-synthesizer.md` | Cross-reference signals × team |
+| idea-validator | `.claude/agents/idea-validator.md` | Automated office-hours filter |
+| idea-web-scanner | `.claude/agents/idea-web-scanner.md` | Broad web search scanner |
+| scan-miner | `.claude/agents/scan-miner.md` | Historical scan intelligence |
+| team-profiler | `.claude/agents/team-profiler.md` | Team LinkedIn profile analysis |
 | synthesis-market-sizing | `.claude/agents/synthesis-market-sizing.md` | TAM/SAM/SOM and GTM analysis |
 | synthesis-causal-chains | `.claude/agents/synthesis-causal-chains.md` | Root cause chain analysis |
 | synthesis-strategic-narrative | `.claude/agents/synthesis-strategic-narrative.md` | Strategic narrative and recommendations |

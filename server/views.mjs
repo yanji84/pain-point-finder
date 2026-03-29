@@ -610,11 +610,129 @@ ${error ? `    <div class="alert alert-error">${esc(error)}</div>` : ''}
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
-export function renderDashboard(scans, activeCount, queueLength, { user, basePath = '' } = {}) {
+export function renderDashboard(scans, activeCount, queueLength, { user, basePath = '', ideas = [], ideaCycles = [] } = {}) {
   const scanList = scans.scans || [];
   const total = scans.total || 0;
   const runningScans = scanList.filter(s => s.status === 'running');
 
+  // ─── Ideas section (top of dashboard) ──────────────────────────────────────
+  const allIdeas = ideas || [];
+  const allCycles = ideaCycles || [];
+  const lastCycle = allCycles[0];
+  const passedCount = allIdeas.filter(i => i.office_hours_verdict && i.office_hours_verdict.toUpperCase() === 'PASS').length;
+  const scannedCount = allIdeas.filter(i => i.status === 'scanned' || i.scan_id).length;
+  const dismissedCount = allIdeas.filter(i => i.status === 'dismissed').length;
+
+  // Cycle timeline (collapsible, last 5)
+  const recentCycles = allCycles.slice(0, 5);
+  let cycleTimeline = '';
+  if (recentCycles.length > 0) {
+    const cycleRows = recentCycles.map(c => `
+      <tr>
+        <td>${timeAgo(c.started_at)}</td>
+        <td>${c.signals_found || 0}</td>
+        <td>${c.ideas_generated || 0}</td>
+        <td>${c.ideas_passed || 0}</td>
+        <td><span class="pill pill-${c.status === 'completed' ? 'completed' : c.status === 'running' ? 'running' : 'failed'}">${esc(c.status)}</span></td>
+      </tr>`).join('');
+
+    cycleTimeline = `
+      <details style="margin-top:8px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--fg-dim)">Cycle history (${allCycles.length} cycles)</summary>
+        <div class="table-wrap" style="margin-top:8px">
+          <table>
+            <thead><tr><th>When</th><th>Signals</th><th>Generated</th><th>Passed</th><th>Status</th></tr></thead>
+            <tbody>${cycleRows}</tbody>
+          </table>
+        </div>
+      </details>`;
+  }
+
+  // Idea cards — sorted: non-dismissed first by score, dismissed at bottom
+  const sorted = [...allIdeas].sort((a, b) => {
+    if (a.status === 'dismissed' && b.status !== 'dismissed') return 1;
+    if (a.status !== 'dismissed' && b.status === 'dismissed') return -1;
+    return (b.overall_score || 0) - (a.overall_score || 0);
+  });
+
+  let ideaCards = '';
+  if (sorted.length === 0) {
+    ideaCards = `<div class="empty" style="font-size:13px;color:var(--fg-dim)">No ideas yet. Run <code>/gapscout ideas</code> to generate team-fit ideas from trending signals.</div>`;
+  } else {
+    ideaCards = sorted.map(idea => {
+      const isDismissed = idea.status === 'dismissed';
+      const cardStyle = isDismissed ? 'opacity:0.5' : '';
+      const verdict = idea.office_hours_verdict ? idea.office_hours_verdict.toUpperCase() : '';
+
+      let signals = [];
+      try {
+        const parsed = JSON.parse(idea.signals_json || '[]');
+        if (Array.isArray(parsed)) {
+          const sources = new Set(parsed.map(s => s.source || s.type || '').filter(Boolean));
+          signals = [...sources];
+        }
+      } catch {}
+
+      let teamNames = [];
+      let teamReason = '';
+      try {
+        const parsed = JSON.parse(idea.team_fit_json || '{}');
+        if (parsed.reason) teamReason = parsed.reason;
+        if (parsed.members) teamNames = parsed.members.map(m => m.name).filter(Boolean);
+        else if (Array.isArray(parsed)) teamNames = parsed.map(m => m.name || m).filter(Boolean);
+      } catch {}
+
+      const hasScan = idea.scan_id && (idea.status === 'scanned' || idea.status === 'completed');
+      const shortReason = teamReason;
+
+      return `
+      <div class="card" style="${cardStyle}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <div style="flex:1;min-width:0">
+            <a href="${basePath}/ideas/${idea.id}" style="font-size:16px;font-weight:600;color:var(--fg);text-decoration:none">${esc(idea.title)}</a>
+            <p style="font-size:13px;color:var(--fg-muted);margin-top:4px;line-height:1.5">${esc(idea.summary || idea.problem_statement || '')}</p>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
+            <span class="pill pill-${idea.status === 'scanning' ? 'running' : idea.status === 'scanned' ? 'completed' : idea.status === 'dismissed' ? 'cancelled' : 'queued'}">${esc(idea.status)}</span>
+            ${verdict ? `<span class="pill" style="background:${verdict === 'PASS' ? 'color-mix(in srgb, var(--success) 15%, transparent)' : verdict === 'WEAK' ? 'color-mix(in srgb, var(--warning) 15%, transparent)' : 'color-mix(in srgb, var(--error) 15%, transparent)'};color:${verdict === 'PASS' ? 'var(--success)' : verdict === 'WEAK' ? 'var(--warning)' : 'var(--error)'}">${verdict}</span>` : ''}
+          </div>
+        </div>
+        ${shortReason ? `<p style="font-size:12px;color:var(--fg-dim);margin-top:8px;line-height:1.5"><strong style="color:var(--fg)">Why this team:</strong> ${esc(shortReason)}</p>` : ''}
+        <div style="display:flex;gap:20px;margin-top:12px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;gap:16px">
+            ${scoreBadge('Fit', idea.team_fit_score)}
+            ${scoreBadge('Demand', idea.demand_score)}
+            ${scoreBadge('Overall', idea.overall_score)}
+          </div>
+          ${signals.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap">${signals.map(s => `<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:var(--bg-hover);color:var(--fg-dim);border:1px solid var(--border)">${esc(s)}</span>`).join('')}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          ${!isDismissed && !hasScan ? `<button class="btn btn-sm btn-primary" onclick="scanIdea(${idea.id})">Scan This</button>` : ''}
+          ${hasScan ? `<a href="${basePath}/scans/${esc(idea.scan_id)}" class="btn btn-sm btn-primary">View Report</a>` : ''}
+          ${!isDismissed ? `<button class="btn btn-sm btn-muted" onclick="dismissIdea(${idea.id})">Dismiss</button>` : ''}
+          <a href="${basePath}/ideas/${idea.id}" class="btn btn-sm btn-muted">Details</a>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  const ideasSection = `
+  <div class="section">
+    <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span>Ideas <span style="font-weight:400;color:var(--fg-dim)">(${allIdeas.length})</span></span>
+      ${lastCycle ? `<span style="font-size:12px;font-weight:400;color:var(--fg-dim)">Last cycle: ${timeAgo(lastCycle.started_at)}</span>` : ''}
+    </div>
+    ${allIdeas.length > 0 ? `
+    <div class="stats-row" style="margin-bottom:12px">
+      <span class="stat"><strong>${passedCount}</strong> passed</span>
+      <span class="stat"><strong>${scannedCount}</strong> scanned</span>
+      <span class="stat"><strong>${dismissedCount}</strong> dismissed</span>
+    </div>` : ''}
+    ${ideaCards}
+    ${cycleTimeline}
+  </div>`;
+
+  // ─── Active scans section ──────────────────────────────────────────────────
   let activeSection = '';
   if (runningScans.length) {
     const cards = runningScans.map(s => {
@@ -643,6 +761,7 @@ export function renderDashboard(scans, activeCount, queueLength, { user, basePat
     </div>`;
   }
 
+  // ─── Scan history table ────────────────────────────────────────────────────
   const pillClass = (status) => `pill pill-${status || 'queued'}`;
 
   let tableBody = '';
@@ -701,6 +820,7 @@ export function renderDashboard(scans, activeCount, queueLength, { user, basePat
       <span class="stat"><strong>${total}</strong> total scans</span>
     </div>
   </div>
+  ${ideasSection}
   ${activeSection}
   <div class="section">
     <div class="section-title">Scan History</div>
@@ -708,7 +828,28 @@ export function renderDashboard(scans, activeCount, queueLength, { user, basePat
   </div>
 </div>`;
 
-  return renderLayout('Dashboard', body, { user, basePath });
+  const scripts = `
+function dismissIdea(id) {
+  if (!confirm('Dismiss this idea?')) return;
+  fetch('${basePath}/api/ideas/' + id + '/dismiss', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) alert(data.error);
+      else location.reload();
+    }).catch(function(err) { alert('Failed: ' + err.message); });
+}
+
+function scanIdea(id) {
+  if (!confirm('Start a full GapScout scan for this idea?')) return;
+  fetch('${basePath}/api/ideas/' + id + '/scan', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) alert(data.error);
+      else window.location.href = '${basePath}/scans/' + data.scanId;
+    }).catch(function(err) { alert('Failed: ' + err.message); });
+}`;
+
+  return renderLayout('Dashboard', body, { user, scripts, basePath });
 }
 
 // ─── New Scan ─────────────────────────────────────────────────────────────────
@@ -1189,15 +1330,66 @@ ${s.completed_at ? `      <div class="meta-item">
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 
-export function renderSettings(users, currentUser, { message, error, basePath = '' } = {}) {
+export function renderSettings(users, currentUser, { message, error, apiKeys = [], basePath = '', webhookConfig, recentDeliveries } = {}) {
   const userRows = (users || []).map(u => `
     <tr>
       <td>${esc(u.username)}</td>
       <td>${fmtDate(u.created_at)}</td>
     </tr>`).join('');
 
+  const apiKeyRows = apiKeys.length > 0 ? apiKeys.map(k => `
+    <tr>
+      <td><code>${esc(k.key_prefix)}...</code></td>
+      <td>${esc(k.name)}</td>
+      <td>${esc(k.bot_identity || '-')}</td>
+      <td>${esc(k.scopes)}</td>
+      <td>${k.last_used_at ? fmtDate(k.last_used_at) : 'Never'}</td>
+      <td>${fmtDate(k.created_at)}</td>
+      <td>
+        <button class="btn btn-sm btn-danger" onclick="revokeKey('${esc(k.id)}')">Revoke</button>
+      </td>
+    </tr>`).join('') : `
+    <tr>
+      <td colspan="7" style="text-align:center;color:var(--fg-muted);padding:20px">No API keys yet.</td>
+    </tr>`;
+
+  const wh = webhookConfig || {};
+  const maskedSecret = wh.webhook_secret
+    ? wh.webhook_secret.slice(0, 4) + '*'.repeat(Math.max(0, wh.webhook_secret.length - 4))
+    : '';
+
+  const deliveryRows = (recentDeliveries || []).map(d => {
+    const statusColor = d.status === 'delivered' ? 'var(--success)'
+      : d.status === 'failed' ? 'var(--error)'
+      : d.status === 'retrying' ? 'var(--warning)'
+      : 'var(--fg-muted)';
+    let scanName = '';
+    try { scanName = JSON.parse(d.payload).name || d.scan_id.slice(0, 8); } catch { scanName = d.scan_id.slice(0, 8); }
+    return `
+    <tr>
+      <td style="color:${statusColor};font-weight:600">${esc(d.status)}</td>
+      <td>${esc(scanName)}</td>
+      <td>${d.attempts}/${d.max_attempts}</td>
+      <td>${d.delivered_at ? fmtDate(d.delivered_at) : '—'}</td>
+      <td style="font-size:12px;color:var(--fg-muted)">${esc((d.error || '').slice(0, 40))}</td>
+    </tr>`;
+  }).join('');
+
+  const deliveriesSection = (recentDeliveries || []).length > 0 ? `
+  <div class="section">
+    <div class="section-title">Recent Deliveries</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Status</th><th>Scan</th><th>Attempts</th><th>Delivered</th><th>Error</th></tr>
+        </thead>
+        <tbody>${deliveryRows}</tbody>
+      </table>
+    </div>
+  </div>` : '';
+
   const body = `
-<div class="container" style="max-width:640px">
+<div class="container" style="max-width:720px">
   <a href="${basePath}/" class="back-link">&larr; Dashboard</a>
   <div class="page-header">
     <h1>Settings</h1>
@@ -1205,6 +1397,73 @@ export function renderSettings(users, currentUser, { message, error, basePath = 
 
 ${message ? `  <div class="alert alert-success">${esc(message)}</div>` : ''}
 ${error ? `  <div class="alert alert-error">${esc(error)}</div>` : ''}
+
+  <div class="section">
+    <div class="section-title">API Keys</div>
+    <div id="api-key-created" style="display:none">
+      <div class="alert alert-success" style="word-break:break-all">
+        API key created. Copy it now &mdash; it will not be shown again:<br>
+        <code id="api-key-value" style="font-size:13px;user-select:all"></code>
+        <button class="btn btn-sm btn-muted" style="margin-left:8px" onclick="navigator.clipboard.writeText(document.getElementById('api-key-value').textContent)">Copy</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Key</th><th>Name</th><th>Bot Identity</th><th>Scopes</th>
+            <th>Last Used</th><th>Created</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="api-keys-body">${apiKeyRows}</tbody>
+      </table>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div id="api-key-msg"></div>
+      <div class="form-group">
+        <label for="key-name">Key Name</label>
+        <input type="text" id="key-name" placeholder="e.g., OpenClaw bot" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="key-bot-identity">Bot Identity <span style="color:var(--fg-muted)">(optional)</span></label>
+        <input type="text" id="key-bot-identity" placeholder="e.g., openclaw-scanner-v1" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="key-scopes">Scopes</label>
+        <select id="key-scopes">
+          <option value="*">All (*)</option>
+          <option value="scans:read">scans:read</option>
+          <option value="scans:read,scans:write">scans:read,write</option>
+          <option value="reports:read">reports:read</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" id="create-key-btn">Create API Key</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Webhooks</div>
+    <div class="card">
+      <p style="color:var(--fg-muted);font-size:13px;margin-bottom:16px">
+        Get notified via HTTP POST when scans complete, fail, or are cancelled.
+        Payloads are signed with HMAC-SHA256 if a secret is set.
+      </p>
+      <form method="POST" action="${basePath}/settings/webhook">
+        <div class="form-group">
+          <label for="webhook-url">Webhook URL</label>
+          <input type="url" id="webhook-url" name="webhook_url" value="${esc(wh.webhook_url || '')}" placeholder="https://example.com/webhook" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="webhook-secret">Signing Secret</label>
+          <input type="password" id="webhook-secret" name="webhook_secret" value="" placeholder="${maskedSecret || 'Optional — HMAC-SHA256 signing key'}" autocomplete="off">
+          <p style="color:var(--fg-dim);font-size:12px;margin-top:4px">${maskedSecret ? 'Secret is set. Leave blank to keep current value, or enter a new one to replace it.' : 'Leave blank for unsigned webhooks.'}</p>
+        </div>
+        <button type="submit" class="btn btn-primary">Save Webhook Settings</button>
+      </form>
+    </div>
+  </div>
+
+${deliveriesSection}
 
   <div class="section">
     <div class="section-title">Team Members</div>
@@ -1253,7 +1512,40 @@ ${error ? `  <div class="alert alert-error">${esc(error)}</div>` : ''}
   </div>
 </div>`;
 
-  return renderLayout('Settings', body, { user: currentUser, basePath });
+  const scripts = `
+document.getElementById('create-key-btn').addEventListener('click', function() {
+  var nameInput = document.getElementById('key-name');
+  var botInput = document.getElementById('key-bot-identity');
+  var scopesSelect = document.getElementById('key-scopes');
+  var msgEl = document.getElementById('api-key-msg');
+  var name = nameInput.value.trim();
+  if (!name) { msgEl.innerHTML = '<div class="alert alert-error">Key name is required.</div>'; return; }
+  fetch('${basePath}/api/keys', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name, botIdentity: botInput.value.trim() || null, scopes: scopesSelect.value })
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    if (data.error) { msgEl.innerHTML = '<div class="alert alert-error">' + data.error + '</div>'; return; }
+    msgEl.innerHTML = '';
+    document.getElementById('api-key-value').textContent = data.key;
+    document.getElementById('api-key-created').style.display = 'block';
+    nameInput.value = '';
+    botInput.value = '';
+    setTimeout(function() { location.reload(); }, 10000);
+  }).catch(function(err) { msgEl.innerHTML = '<div class="alert alert-error">Failed: ' + err.message + '</div>'; });
+});
+
+function revokeKey(id) {
+  if (!confirm('Revoke this API key? This cannot be undone.')) return;
+  fetch('${basePath}/api/keys/' + id, { method: 'DELETE' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) { alert(data.error); return; }
+      location.reload();
+    }).catch(function(err) { alert('Revoke failed: ' + err.message); });
+}`;
+
+  return renderLayout('Settings', body, { user: currentUser, scripts, basePath });
 }
 
 // ─── Connections ──────────────────────────────────────────────────────────────
@@ -1365,4 +1657,376 @@ function deleteMember(name) {
 }`;
 
   return renderLayout('Connections', body, { user, scripts, basePath });
+}
+
+// ─── Ideas ───────────────────────────────────────────────────────────────────
+
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+function verdictClass(verdict) {
+  if (!verdict) return '';
+  const v = verdict.toUpperCase();
+  if (v === 'PASS') return 'verdict-pass';
+  if (v === 'WEAK') return 'verdict-weak';
+  return 'verdict-fail';
+}
+
+function scoreBadge(label, value) {
+  const v = Math.round(value || 0);
+  let color = 'var(--fg-muted)';
+  if (v >= 70) color = 'var(--success)';
+  else if (v >= 40) color = 'var(--warning)';
+  else if (v > 0) color = 'var(--error)';
+  return `<span style="font-size:12px;color:var(--fg-dim)">${esc(label)}</span> <strong style="color:${color}">${v}</strong>`;
+}
+
+export function renderIdeasPage(ideas, cycles, { user, basePath = '' } = {}) {
+  const allIdeas = ideas || [];
+  const allCycles = cycles || [];
+  const lastCycle = allCycles[0];
+
+  const totalIdeas = allIdeas.length;
+  const passedCount = allIdeas.filter(i => i.office_hours_verdict && i.office_hours_verdict.toUpperCase() === 'PASS').length;
+  const scannedCount = allIdeas.filter(i => i.status === 'scanned' || i.scan_id).length;
+  const dismissedCount = allIdeas.filter(i => i.status === 'dismissed').length;
+
+  // Cycle timeline (last 5)
+  const recentCycles = allCycles.slice(0, 5);
+  let cycleTimeline = '';
+  if (recentCycles.length > 0) {
+    const cycleRows = recentCycles.map(c => `
+      <tr>
+        <td>${timeAgo(c.started_at)}</td>
+        <td>${c.signals_found || 0}</td>
+        <td>${c.ideas_generated || 0}</td>
+        <td>${c.ideas_passed || 0}</td>
+        <td><span class="pill pill-${c.status === 'completed' ? 'completed' : c.status === 'running' ? 'running' : 'failed'}">${esc(c.status)}</span></td>
+      </tr>`).join('');
+
+    cycleTimeline = `
+    <div class="section">
+      <details>
+        <summary class="section-title" style="cursor:pointer">Cycle History <span style="font-weight:400;color:var(--fg-dim)">(${allCycles.length} cycles)</span></summary>
+        <div class="table-wrap" style="margin-top:8px">
+          <table>
+            <thead><tr><th>When</th><th>Signals</th><th>Generated</th><th>Passed</th><th>Status</th></tr></thead>
+            <tbody>${cycleRows}</tbody>
+          </table>
+        </div>
+      </details>
+    </div>`;
+  }
+
+  // Sort ideas: non-dismissed first by overall_score desc, dismissed at bottom
+  const sorted = [...allIdeas].sort((a, b) => {
+    if (a.status === 'dismissed' && b.status !== 'dismissed') return 1;
+    if (a.status !== 'dismissed' && b.status === 'dismissed') return -1;
+    return (b.overall_score || 0) - (a.overall_score || 0);
+  });
+
+  let ideaCards = '';
+  if (sorted.length === 0) {
+    ideaCards = `<div class="empty">No ideas yet. Ideas are generated automatically by the idea mining pipeline.</div>`;
+  } else {
+    ideaCards = sorted.map(idea => {
+      const isDismissed = idea.status === 'dismissed';
+      const cardStyle = isDismissed ? 'opacity:0.5' : '';
+      const verdict = idea.office_hours_verdict ? idea.office_hours_verdict.toUpperCase() : '';
+
+      // Signal sources
+      let signals = [];
+      try {
+        const parsed = JSON.parse(idea.signals_json || '[]');
+        if (Array.isArray(parsed)) {
+          const sources = new Set(parsed.map(s => s.source || s.type || '').filter(Boolean));
+          signals = [...sources];
+        }
+      } catch {}
+
+      // Team fit names
+      let teamNames = [];
+      try {
+        const parsed = JSON.parse(idea.team_fit_json || '{}');
+        if (parsed.members) teamNames = parsed.members.map(m => m.name).filter(Boolean);
+        else if (Array.isArray(parsed)) teamNames = parsed.map(m => m.name || m).filter(Boolean);
+      } catch {}
+
+      const hasScan = idea.scan_id && (idea.status === 'scanned' || idea.status === 'completed');
+
+      return `
+      <div class="card" style="${cardStyle}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <div style="flex:1;min-width:0">
+            <a href="${basePath}/ideas/${idea.id}" style="font-size:16px;font-weight:600;color:var(--fg);text-decoration:none">${esc(idea.title)}</a>
+            <p style="font-size:13px;color:var(--fg-muted);margin-top:4px;line-height:1.5">${esc(idea.summary || idea.problem_statement || '')}</p>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
+            <span class="pill pill-${idea.status === 'scanning' ? 'running' : idea.status === 'scanned' ? 'completed' : idea.status === 'dismissed' ? 'cancelled' : 'queued'}">${esc(idea.status)}</span>
+            ${verdict ? `<span class="pill ${verdictClass(verdict)}" style="background:${verdict === 'PASS' ? 'color-mix(in srgb, var(--success) 15%, transparent)' : verdict === 'WEAK' ? 'color-mix(in srgb, var(--warning) 15%, transparent)' : 'color-mix(in srgb, var(--error) 15%, transparent)'};color:${verdict === 'PASS' ? 'var(--success)' : verdict === 'WEAK' ? 'var(--warning)' : 'var(--error)'}">${verdict}</span>` : ''}
+          </div>
+        </div>
+
+        <div style="display:flex;gap:20px;margin-top:12px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;gap:16px">
+            ${scoreBadge('Fit', idea.team_fit_score)}
+            ${scoreBadge('Demand', idea.demand_score)}
+            ${scoreBadge('Overall', idea.overall_score)}
+          </div>
+          ${signals.length > 0 ? `<div style="display:flex;gap:4px;flex-wrap:wrap">${signals.map(s => `<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:var(--bg-hover);color:var(--fg-dim);border:1px solid var(--border)">${esc(s)}</span>`).join('')}</div>` : ''}
+          ${teamNames.length > 0 ? `<div style="font-size:11px;color:var(--fg-dim)">Team: ${teamNames.map(n => esc(n)).join(', ')}</div>` : ''}
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:12px">
+          ${!isDismissed && !hasScan ? `<button class="btn btn-sm btn-primary" onclick="scanIdea(${idea.id})">Scan This</button>` : ''}
+          ${hasScan ? `<a href="${basePath}/scans/${esc(idea.scan_id)}" class="btn btn-sm btn-primary">View Report</a>` : ''}
+          ${!isDismissed ? `<button class="btn btn-sm btn-muted" onclick="dismissIdea(${idea.id})">Dismiss</button>` : ''}
+          <a href="${basePath}/ideas/${idea.id}" class="btn btn-sm btn-muted">View Details</a>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  const body = `
+<div class="container">
+  <a href="${basePath}/" class="back-link">&larr; Dashboard</a>
+  <div class="page-header">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+      <h1>Ideas <span style="font-size:14px;font-weight:400;color:var(--fg-muted)">(${totalIdeas})</span></h1>
+    </div>
+    ${lastCycle ? `<p class="subtitle">Last cycle: ${timeAgo(lastCycle.started_at)}</p>` : ''}
+    <div class="stats-row" style="margin-top:10px">
+      <span class="stat"><strong>${totalIdeas}</strong> total</span>
+      <span class="stat"><strong>${passedCount}</strong> passed</span>
+      <span class="stat"><strong>${scannedCount}</strong> scanned</span>
+      <span class="stat"><strong>${dismissedCount}</strong> dismissed</span>
+    </div>
+  </div>
+
+  ${cycleTimeline}
+
+  <div class="section">
+    <div class="section-title">Ideas</div>
+    ${ideaCards}
+  </div>
+</div>`;
+
+  const scripts = `
+function dismissIdea(id) {
+  if (!confirm('Dismiss this idea?')) return;
+  fetch('${basePath}/api/ideas/' + id + '/dismiss', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) alert(data.error);
+      else location.reload();
+    }).catch(function(err) { alert('Failed: ' + err.message); });
+}
+
+function scanIdea(id) {
+  if (!confirm('Start a full GapScout scan for this idea?')) return;
+  fetch('${basePath}/api/ideas/' + id + '/scan', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) alert(data.error);
+      else window.location.href = '${basePath}/scans/' + data.scanId;
+    }).catch(function(err) { alert('Failed: ' + err.message); });
+}`;
+
+  return renderLayout('Ideas', body, { user, scripts, basePath });
+}
+
+// ─── Idea Detail ─────────────────────────────────────────────────────────────
+
+export function renderIdeaDetailPage(idea, { user, basePath = '' } = {}) {
+  const i = idea;
+  const verdict = (i.office_hours_verdict || '').toUpperCase();
+
+  // Parse JSON fields safely
+  let signals = [];
+  try { signals = JSON.parse(i.signals_json || '[]'); } catch {}
+
+  let teamFit = {};
+  try { teamFit = JSON.parse(i.team_fit_json || '{}'); } catch {}
+
+  let officeScores = {};
+  try { officeScores = JSON.parse(i.office_hours_scores || '{}'); } catch {}
+
+  const hasScan = i.scan_id && (i.status === 'scanned' || i.status === 'completed');
+
+  // Simple markdown-to-HTML: headers, bold, lists, paragraphs
+  function simpleMarkdown(text) {
+    if (!text) return '';
+    return esc(text)
+      .replace(/^### (.+)$/gm, '<h4 style="margin:12px 0 6px;font-size:14px;font-weight:600">$1</h4>')
+      .replace(/^## (.+)$/gm, '<h3 style="margin:16px 0 8px;font-size:15px;font-weight:600">$1</h3>')
+      .replace(/^# (.+)$/gm, '<h2 style="margin:20px 0 10px;font-size:16px;font-weight:700">$1</h2>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^- (.+)$/gm, '<li style="margin-left:20px;font-size:13px">$1</li>')
+      .replace(/\n\n/g, '<br><br>')
+      .replace(/\n/g, '<br>');
+  }
+
+  const signalsList = signals.length > 0 ? `
+    <div class="section">
+      <div class="section-title">Signals (${signals.length})</div>
+      <div class="card">
+        ${signals.map(s => `
+          <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="color:var(--fg)">${esc(s.title || s.text || s.signal || JSON.stringify(s))}</span>
+              <span style="font-size:10px;padding:1px 6px;border-radius:4px;background:var(--bg-hover);color:var(--fg-dim)">${esc(s.source || s.type || '')}</span>
+            </div>
+            ${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener" style="font-size:11px">${esc(s.url)}</a>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>` : '';
+
+  // Team fit breakdown
+  let teamFitSection = '';
+  const teamReason = teamFit.reason || '';
+  const teamMembers = teamFit.members || (Array.isArray(teamFit) ? teamFit : []);
+  if (teamReason || teamMembers.length > 0) {
+    let memberRows = '';
+    if (teamMembers.length > 0) {
+      const rows = teamMembers.map(m => `
+        <tr>
+          <td>${esc(m.name || m)}</td>
+          <td>${m.score != null ? Math.round(m.score) : '—'}</td>
+          <td style="font-size:12px;color:var(--fg-muted)">${esc(m.reason || m.match || '')}</td>
+        </tr>`).join('');
+      memberRows = `
+      <div class="table-wrap" style="margin-top:12px">
+        <table>
+          <thead><tr><th>Member</th><th>Score</th><th>Match Reason</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    }
+    teamFitSection = `
+    <div class="section">
+      <div class="section-title">Why This Team</div>
+      ${teamReason ? `<div class="card" style="font-size:13px;color:var(--fg-muted);line-height:1.7">${simpleMarkdown(teamReason)}</div>` : ''}
+      ${memberRows}
+    </div>`;
+  }
+
+  // Office hours scores
+  let officeSection = '';
+  const ohKeys = Object.keys(officeScores);
+  if (ohKeys.length > 0) {
+    const ohRows = ohKeys.map(k => `
+      <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="font-weight:500;font-size:13px;margin-bottom:4px">${esc(k)}</div>
+        <div style="font-size:13px;color:var(--fg-muted)">${typeof officeScores[k] === 'object' ? esc(JSON.stringify(officeScores[k])) : esc(String(officeScores[k]))}</div>
+      </div>`).join('');
+    officeSection = `
+    <div class="section">
+      <div class="section-title">Office Hours Assessment</div>
+      <div class="card">${ohRows}</div>
+    </div>`;
+  }
+
+  const body = `
+<div class="container">
+  <a href="${basePath}/" class="back-link">&larr; Dashboard</a>
+  <div class="page-header">
+    <h1>${esc(i.title)}</h1>
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+      <span class="pill pill-${i.status === 'scanning' ? 'running' : i.status === 'scanned' ? 'completed' : i.status === 'dismissed' ? 'cancelled' : 'queued'}">${esc(i.status)}</span>
+      ${verdict ? `<span class="pill" style="background:${verdict === 'PASS' ? 'color-mix(in srgb, var(--success) 15%, transparent)' : verdict === 'WEAK' ? 'color-mix(in srgb, var(--warning) 15%, transparent)' : 'color-mix(in srgb, var(--error) 15%, transparent)'};color:${verdict === 'PASS' ? 'var(--success)' : verdict === 'WEAK' ? 'var(--warning)' : 'var(--error)'}">${verdict}</span>` : ''}
+    </div>
+  </div>
+
+  <div class="meta-row">
+    <div class="meta-item">
+      <span class="meta-label">Team Fit</span>
+      <span class="meta-value" style="font-size:18px;font-weight:700">${Math.round(i.team_fit_score || 0)}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Demand</span>
+      <span class="meta-value" style="font-size:18px;font-weight:700">${Math.round(i.demand_score || 0)}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Overall</span>
+      <span class="meta-value" style="font-size:18px;font-weight:700">${Math.round(i.overall_score || 0)}</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-label">Created</span>
+      <span class="meta-value">${fmtDate(i.created_at)}</span>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-bottom:24px">
+    ${i.status !== 'dismissed' && !hasScan ? `<button class="btn btn-primary" onclick="scanIdea(${i.id})">Scan This Idea</button>` : ''}
+    ${hasScan ? `<a href="${basePath}/scans/${esc(i.scan_id)}" class="btn btn-primary">View Scan Report</a>` : ''}
+    ${i.status !== 'dismissed' ? `<button class="btn btn-muted" onclick="dismissIdea(${i.id})">Dismiss</button>` : ''}
+  </div>
+
+  ${i.summary ? `
+  <div class="section">
+    <div class="section-title">Summary</div>
+    <div class="card" style="font-size:13px;color:var(--fg-muted);line-height:1.7">${simpleMarkdown(i.summary)}</div>
+  </div>` : ''}
+
+  ${i.problem_statement ? `
+  <div class="section">
+    <div class="section-title">Problem Statement</div>
+    <div class="card" style="font-size:13px;color:var(--fg-muted);line-height:1.7">${simpleMarkdown(i.problem_statement)}</div>
+  </div>` : ''}
+
+  ${i.demand_brief ? `
+  <div class="section">
+    <div class="section-title">Demand Brief</div>
+    <div class="card" style="font-size:13px;color:var(--fg-muted);line-height:1.7">${simpleMarkdown(i.demand_brief)}</div>
+  </div>` : ''}
+
+  ${teamFitSection}
+  ${officeSection}
+  ${signalsList}
+
+  ${i.competitive_landscape ? `
+  <div class="section">
+    <div class="section-title">Competitive Landscape</div>
+    <div class="card" style="font-size:13px;color:var(--fg-muted);line-height:1.7">${simpleMarkdown(i.competitive_landscape)}</div>
+  </div>` : ''}
+
+  ${i.narrowest_wedge ? `
+  <div class="section">
+    <div class="section-title">Narrowest Wedge</div>
+    <div class="card" style="font-size:13px;color:var(--fg-muted);line-height:1.7">${simpleMarkdown(i.narrowest_wedge)}</div>
+  </div>` : ''}
+</div>`;
+
+  const scripts = `
+function dismissIdea(id) {
+  if (!confirm('Dismiss this idea?')) return;
+  fetch('${basePath}/api/ideas/' + id + '/dismiss', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) alert(data.error);
+      else location.reload();
+    }).catch(function(err) { alert('Failed: ' + err.message); });
+}
+
+function scanIdea(id) {
+  if (!confirm('Start a full GapScout scan for this idea?')) return;
+  fetch('${basePath}/api/ideas/' + id + '/scan', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.error) alert(data.error);
+      else window.location.href = '${basePath}/scans/' + data.scanId;
+    }).catch(function(err) { alert('Failed: ' + err.message); });
+}`;
+
+  return renderLayout(i.title, body, { user, scripts, basePath });
 }

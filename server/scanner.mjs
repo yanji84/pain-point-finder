@@ -2,11 +2,48 @@ import { spawn } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readdirSync, readFileSync, existsSync, writeFileSync, appendFileSync } from 'node:fs';
-import { updateScan, getRunningScans } from './db.mjs';
+import { updateScan, getRunningScans, getScan as dbGetScan } from './db.mjs';
+import { fireWebhook } from './webhooks.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CLI_PATH = resolve(__dirname, '..', 'scripts', 'cli.mjs');
 const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_SCANS) || 3;
+
+/**
+ * Read a quick report summary from the scan directory for webhook payloads.
+ */
+function readReportSummary(scanDir) {
+  try {
+    const reportPath = join(scanDir, 'report.json');
+    if (!existsSync(reportPath)) return null;
+    const report = JSON.parse(readFileSync(reportPath, 'utf8'));
+    const competitors = report.competitors || report.competitive_landscape || [];
+    const opportunities = report.opportunities || report.gap_matrix || [];
+    return {
+      competitor_count: Array.isArray(competitors) ? competitors.length : 0,
+      opportunity_count: Array.isArray(opportunities) ? opportunities.length : 0,
+      top_opportunity: Array.isArray(opportunities) && opportunities[0]
+        ? (opportunities[0].name || opportunities[0].title || null)
+        : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fire webhook after scan reaches a terminal state.
+ */
+async function fireWebhookForScan(db, scanId) {
+  try {
+    const scan = dbGetScan(db, scanId);
+    if (!scan) return;
+    const summary = scan.scan_dir ? readReportSummary(scan.scan_dir) : null;
+    await fireWebhook(db, scan, summary);
+  } catch (err) {
+    console.error('[webhooks] Error firing webhook for scan', scanId, ':', err.message);
+  }
+}
 
 /** scanId -> ChildProcess */
 const children = new Map();
@@ -218,6 +255,7 @@ function startQuickScan(db, { id, domain, sources, scanDir, timeout }) {
                 persistLogLine(scanDir, htmlMsg);
               }
               updateScan(db, id, { status: 'completed', progress_pct: 100, progress_detail: 'Report generated', completed_at: new Date().toISOString() });
+              fireWebhookForScan(db, id);
               drainQueue(db);
             });
 
@@ -228,6 +266,7 @@ function startQuickScan(db, { id, domain, sources, scanDir, timeout }) {
                 persistLogLine(scanDir, errMsg);
               }
               updateScan(db, id, { status: 'completed', progress_pct: 100, completed_at: new Date().toISOString() });
+              fireWebhookForScan(db, id);
               drainQueue(db);
             });
           } else {
@@ -239,6 +278,7 @@ function startQuickScan(db, { id, domain, sources, scanDir, timeout }) {
               persistLogLine(scanDir, failMsg);
             }
             updateScan(db, id, { status: 'completed', progress_pct: 100, completed_at: new Date().toISOString() });
+            fireWebhookForScan(db, id);
             drainQueue(db);
           }
         });
@@ -253,6 +293,7 @@ function startQuickScan(db, { id, domain, sources, scanDir, timeout }) {
             persistLogLine(scanDir, spawnErrMsg);
           }
           updateScan(db, id, { status: 'completed', progress_pct: 100, completed_at: new Date().toISOString() });
+          fireWebhookForScan(db, id);
           drainQueue(db);
         });
       } catch (err) {
@@ -267,6 +308,7 @@ function startQuickScan(db, { id, domain, sources, scanDir, timeout }) {
           progress_pct: 100,
           completed_at: new Date().toISOString(),
         });
+        fireWebhookForScan(db, id);
         drainQueue(db);
       }
     } else {
@@ -281,6 +323,7 @@ function startQuickScan(db, { id, domain, sources, scanDir, timeout }) {
         error: stderr.slice(0, 2000) || `Process exited with code ${code}`,
         completed_at: new Date().toISOString(),
       });
+      fireWebhookForScan(db, id);
       drainQueue(db);
     }
   });
@@ -292,6 +335,7 @@ function startQuickScan(db, { id, domain, sources, scanDir, timeout }) {
       error: err.message,
       completed_at: new Date().toISOString(),
     });
+    fireWebhookForScan(db, id);
     drainQueue(db);
   });
 }
@@ -518,6 +562,7 @@ function startDeepScan(db, { id, domain, scanDir, timeout }) {
         progress_detail: 'Deep scan complete',
         completed_at: new Date().toISOString()
       });
+      fireWebhookForScan(db, id);
     } else {
       if (logEntry) {
         const failMsg = { ts: Date.now(), text: '[gapscout] \u2717 Deep scan failed (exit code ' + code + ')' };
@@ -529,6 +574,7 @@ function startDeepScan(db, { id, domain, scanDir, timeout }) {
         error: 'Deep scan exited with code ' + code,
         completed_at: new Date().toISOString()
       });
+      fireWebhookForScan(db, id);
     }
     drainQueue(db);
   });
@@ -546,6 +592,7 @@ function startDeepScan(db, { id, domain, scanDir, timeout }) {
       error: err.message,
       completed_at: new Date().toISOString()
     });
+    fireWebhookForScan(db, id);
     drainQueue(db);
   });
 }
@@ -574,6 +621,7 @@ export function cancelScan(db, scanId) {
       status: 'cancelled',
       completed_at: new Date().toISOString(),
     });
+    fireWebhookForScan(db, scanId);
     return;
   }
 
@@ -584,6 +632,7 @@ export function cancelScan(db, scanId) {
       status: 'cancelled',
       completed_at: new Date().toISOString(),
     });
+    fireWebhookForScan(db, scanId);
   }
 }
 
@@ -724,6 +773,7 @@ export function cleanupStale(db) {
           error: 'Server restarted during scan',
           completed_at: new Date().toISOString(),
         });
+        fireWebhookForScan(db, scan.id);
       }
     } else {
       updateScan(db, scan.id, {
@@ -731,6 +781,7 @@ export function cleanupStale(db) {
         error: 'Server restarted during scan',
         completed_at: new Date().toISOString(),
       });
+      fireWebhookForScan(db, scan.id);
     }
   }
 }

@@ -63,6 +63,40 @@ Based on the parsed **market** field:
 - **Mode A — Market/category**: e.g., "project management tools" -> full market scan
 - **Mode B — Named competitors**: e.g., "Jira, Asana, Linear" with no market description -> competitor weakness scan
 - **Mode C — No input**: `$ARGUMENTS` is empty -> scan HN frontpage -> suggest trending markets -> user picks one
+- **Mode D — Ideas**: `$ARGUMENTS` contains "ideas" (e.g., "/gapscout ideas", "/gapscout ideas --auto") -> idea generation mode
+
+### Mode D: Idea Generation Pipeline
+
+When Mode D is detected:
+
+1. Create scan directory: `/root/gapscout/data/ideas/{YYYY-MM-DD-HHmmss}/`
+2. Check for `--auto` flag in arguments (enables auto-scan of top idea)
+3. Check for `--scan-top=N` flag (how many ideas to auto-scan, default 1)
+4. Read the idea-generator agent definition and execute its pipeline:
+
+```
+Read .claude/agents/idea-generator.md
+```
+
+The idea-generator orchestrator handles everything:
+- Team profiling (reads `team/` directory)
+- Historical scan mining (reads `data/scans/`)
+- Trend harvesting (GitHub, HN, Reddit, web search)
+- Idea synthesis and team-fit scoring
+- Office-hours automated filtering
+- Demand brief generation
+- Auto-scan launch (if `--auto` flag)
+- DB write (`idea_cycles` + `ideas` tables)
+
+**IMPORTANT:** In Mode D, you do NOT run the normal GapScout pipeline (Steps 1-9). You spawn the idea-generator agent and let it orchestrate everything. Your only job is parsing the arguments and spawning it.
+
+After the idea-generator completes, present results to the user:
+- Summary: "Generated N ideas, M passed office-hours filter"
+- List top ideas with scores
+- If auto-scan was triggered: "Auto-scanning top idea: {title}"
+- Link to dashboard: "View all ideas at /ideas"
+
+Then STOP. Do not proceed to Step 0c or any subsequent steps.
 
 ### 0c: Generate scan ID and directory
 
@@ -212,6 +246,7 @@ TaskUpdate({ id: <task-id>, description: "Phase 3: Scanning (retry 1/2 — rate 
 - **Read before deciding.** Always read stage completion files and QA verdicts before spawning the next stage.
 - **Don't over-retry.** Max 2 retries per stage, max 3 synthesis iterations. Ship imperfect data rather than looping forever.
 - **Track everything.** Write orchestration decisions to `/tmp/gapscout-<scan-id>/orchestrator-log.jsonl`.
+- **Mode D is a separate pipeline.** If `$ARGUMENTS` contains "ideas", enter Mode D and spawn the idea-generator agent. Do NOT run the normal Steps 1-9. The idea-generator orchestrates its own sub-agents.
 
 ## User's request
 

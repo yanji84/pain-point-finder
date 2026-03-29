@@ -8,6 +8,8 @@ import {
   exportConnectionsForScan,
   getConnectionMembers,
 } from '../db.mjs';
+import { apiError, ErrorCodes } from '../middleware/errors.mjs';
+import { requireScope } from '../auth.mjs';
 
 function parseCSVLine(line) {
   const result = [];
@@ -62,25 +64,25 @@ export function createConnectionsRouter(db) {
   const router = Router();
 
   // POST /upload — Upload LinkedIn connections CSV for a team member
-  router.post('/upload', async (req, res) => {
+  router.post('/upload', requireScope('connections:write'), async (req, res) => {
     try {
       const { memberName, csvContent } = req.body;
 
       if (!memberName || typeof memberName !== 'string') {
-        return res.status(400).json({ error: 'memberName is required' });
+        return apiError(res, 400, ErrorCodes.INVALID_INPUT, 'memberName is required', req.requestId);
       }
 
       if (!/^[a-zA-Z0-9_-]{1,50}$/.test(memberName)) {
-        return res.status(400).json({ error: 'memberName must be alphanumeric with hyphens/underscores, max 50 chars' });
+        return apiError(res, 400, ErrorCodes.INVALID_INPUT, 'memberName must be alphanumeric with hyphens/underscores, max 50 chars', req.requestId);
       }
 
       if (!csvContent || typeof csvContent !== 'string') {
-        return res.status(400).json({ error: 'csvContent is required' });
+        return apiError(res, 400, ErrorCodes.INVALID_INPUT, 'csvContent is required', req.requestId);
       }
 
       const connections = parseLinkedInCSV(csvContent);
       if (connections.length === 0) {
-        return res.status(400).json({ error: 'No valid connections found in CSV' });
+        return apiError(res, 400, ErrorCodes.INVALID_INPUT, 'No valid connections found in CSV', req.requestId);
       }
 
       upsertConnections(db, memberName, connections, req.user.id);
@@ -88,28 +90,28 @@ export function createConnectionsRouter(db) {
       res.json({ ok: true, memberName, count: connections.length });
     } catch (err) {
       console.error('POST /connections/upload error:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      apiError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Internal server error', req.requestId);
     }
   });
 
   // GET / — List all team members with connection counts
-  router.get('/', async (req, res) => {
+  router.get('/', requireScope('connections:read'), async (req, res) => {
     try {
       const stats = getConnectionStats(db);
       res.json(stats);
     } catch (err) {
       console.error('GET /connections error:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      apiError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Internal server error', req.requestId);
     }
   });
 
   // DELETE /:memberName — Delete all connections for a team member
-  router.delete('/:memberName', async (req, res) => {
+  router.delete('/:memberName', requireScope('connections:write'), async (req, res) => {
     try {
       const { memberName } = req.params;
 
       if (!/^[a-zA-Z0-9_-]{1,50}$/.test(memberName)) {
-        return res.status(400).json({ error: 'Invalid memberName' });
+        return apiError(res, 400, ErrorCodes.INVALID_INPUT, 'Invalid memberName', req.requestId);
       }
 
       deleteConnectionsByMember(db, memberName);
@@ -117,17 +119,17 @@ export function createConnectionsRouter(db) {
       res.json({ ok: true, deleted: memberName });
     } catch (err) {
       console.error('DELETE /connections/:memberName error:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      apiError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Internal server error', req.requestId);
     }
   });
 
   // GET /export — Export connections as CSVs into a scan directory
-  router.get('/export', async (req, res) => {
+  router.get('/export', requireScope('connections:read'), async (req, res) => {
     try {
       const { scanDir } = req.query;
 
       if (!scanDir) {
-        return res.status(400).json({ error: 'scanDir query param is required' });
+        return apiError(res, 400, ErrorCodes.INVALID_INPUT, 'scanDir query param is required', req.requestId);
       }
 
       const teamDir = join(scanDir, 'team-connections');
@@ -154,7 +156,7 @@ export function createConnectionsRouter(db) {
       res.json({ ok: true, members: members.length, totalExported, dir: teamDir });
     } catch (err) {
       console.error('GET /connections/export error:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      apiError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Internal server error', req.requestId);
     }
   });
 

@@ -2,24 +2,35 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import { join } from 'node:path';
 import { readdirSync, readFileSync, mkdirSync } from 'node:fs';
-import { createScan, getScan, listScans, updateScan } from '../db.mjs';
+import { createScan, getScan, listScans, updateScan, getUserWebhookConfig } from '../db.mjs';
 import { startScan, cancelScan, checkProgress, getScanLogs } from '../scanner.mjs';
+import { apiError, ErrorCodes } from '../middleware/errors.mjs';
+import { validateCallbackUrl } from '../webhooks.mjs';
+import { requireScope } from '../auth.mjs';
 
 export function createScansRouter(db, dataDir) {
   const router = Router();
 
   // POST / — Create and start a scan
-  router.post('/', async (req, res) => {
+  router.post('/', requireScope('scans:write'), async (req, res) => {
     try {
-      const { name, domain, sources, timeout, mode } = req.body;
+      const { name, domain, sources, timeout, mode, callback_url } = req.body;
       const id = crypto.randomUUID();
       const scanDir = join(dataDir, 'scans', id);
+
+      // Validate callback_url if provided
+      if (callback_url && !validateCallbackUrl(callback_url)) {
+        return apiError(res, 400, ErrorCodes.INVALID_INPUT, 'Invalid callback_url. Must be https:// (or http://localhost in dev).', req.requestId);
+      }
+
+      // Determine effective callback URL: explicit > user default
+      const effectiveCallbackUrl = callback_url || getUserWebhookConfig(db, req.user.id)?.webhook_url || null;
 
       mkdirSync(scanDir, { recursive: true });
 
       await createScan(db, {
         id,
-        name,
+        name: name || domain,
         domain,
         sources: sources || 'all',
         mode: mode || 'full',
@@ -27,17 +38,22 @@ export function createScansRouter(db, dataDir) {
         createdBy: req.user.id,
       });
 
+      // Store callback_url on the scan record
+      if (effectiveCallbackUrl) {
+        db.prepare('UPDATE scans SET callback_url = ? WHERE id = ?').run(effectiveCallbackUrl, id);
+      }
+
       await startScan(db, { id, domain, sources, scanDir, timeout, mode: mode || 'full' });
 
       res.status(201).json({ id, status: 'queued' });
     } catch (err) {
       console.error('POST /scans error:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      apiError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Internal server error', req.requestId);
     }
   });
 
   // GET / — List scans
-  router.get('/', async (req, res) => {
+  router.get('/', requireScope('scans:read'), async (req, res) => {
     try {
       const { status, limit = 20, offset = 0 } = req.query;
       const { scans, total } = await listScans(db, {
@@ -61,16 +77,16 @@ export function createScansRouter(db, dataDir) {
       res.json({ scans: enriched, total });
     } catch (err) {
       console.error('GET /scans error:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      apiError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Internal server error', req.requestId);
     }
   });
 
   // GET /:id — Get scan detail with live progress
-  router.get('/:id', async (req, res) => {
+  router.get('/:id', requireScope('scans:read'), async (req, res) => {
     try {
       const scan = await getScan(db, req.params.id);
       if (!scan) {
-        return res.status(404).json({ error: 'Scan not found' });
+        return apiError(res, 404, ErrorCodes.SCAN_NOT_FOUND, 'Scan not found', req.requestId);
       }
 
       const result = { ...scan };
@@ -78,6 +94,18 @@ export function createScansRouter(db, dataDir) {
         try {
           const progress = checkProgress(scan.scan_dir);
           Object.assign(result, { progress });
+
+          // Retry-After headers for bots polling a running scan
+          const pct = progress.pct || 0;
+          const retryAfter = pct < 50 ? 120 : 30;
+          res.setHeader('Retry-After', String(retryAfter));
+          // Rough estimate: assume started_at is known, extrapolate from progress
+          if (scan.started_at && pct > 0) {
+            const elapsed = Date.now() - new Date(scan.started_at).getTime();
+            const totalEstimate = elapsed / (pct / 100);
+            const eta = new Date(new Date(scan.started_at).getTime() + totalEstimate);
+            res.setHeader('X-Estimated-Completion', eta.toISOString());
+          }
         } catch {
           // progress unavailable, return scan without it
         }
@@ -86,16 +114,16 @@ export function createScansRouter(db, dataDir) {
       res.json(result);
     } catch (err) {
       console.error('GET /scans/:id error:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      apiError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Internal server error', req.requestId);
     }
   });
 
   // DELETE /:id — Cancel a scan
-  router.delete('/:id', async (req, res) => {
+  router.delete('/:id', requireScope('scans:write'), async (req, res) => {
     try {
       const scan = await getScan(db, req.params.id);
       if (!scan) {
-        return res.status(404).json({ error: 'Scan not found' });
+        return apiError(res, 404, ErrorCodes.SCAN_NOT_FOUND, 'Scan not found', req.requestId);
       }
 
       await cancelScan(db, req.params.id);
@@ -103,29 +131,29 @@ export function createScansRouter(db, dataDir) {
       res.json({ status: 'cancelled' });
     } catch (err) {
       console.error('DELETE /scans/:id error:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      apiError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Internal server error', req.requestId);
     }
   });
 
   // GET /:id/logs — Get historical log lines for a scan
-  router.get('/:id/logs', (req, res) => {
+  router.get('/:id/logs', requireScope('scans:read'), (req, res) => {
     try {
       const scan = getScan(db, req.params.id);
-      if (!scan) return res.status(404).json({ error: 'Scan not found' });
+      if (!scan) return apiError(res, 404, ErrorCodes.SCAN_NOT_FOUND, 'Scan not found', req.requestId);
 
       const fromCursor = parseInt(req.query.cursor) || 0;
       const logData = getScanLogs(req.params.id, fromCursor);
       res.json(logData);
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      apiError(res, 500, ErrorCodes.INTERNAL_ERROR, err.message, req.requestId);
     }
   });
 
   // GET /:id/events — SSE stream for live progress + log lines
-  router.get('/:id/events', (req, res) => {
+  router.get('/:id/events', requireScope('scans:read'), (req, res) => {
     try {
       const scan = getScan(db, req.params.id);
-      if (!scan) return res.status(404).json({ error: 'Scan not found' });
+      if (!scan) return apiError(res, 404, ErrorCodes.SCAN_NOT_FOUND, 'Scan not found', req.requestId);
 
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -200,16 +228,16 @@ export function createScansRouter(db, dataDir) {
         clearInterval(interval);
       });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      apiError(res, 500, ErrorCodes.INTERNAL_ERROR, err.message, req.requestId);
     }
   });
 
   // GET /:id/artifacts — List scan output files
-  router.get('/:id/artifacts', async (req, res) => {
+  router.get('/:id/artifacts', requireScope('scans:read'), async (req, res) => {
     try {
       const scan = await getScan(db, req.params.id);
       if (!scan) {
-        return res.status(404).json({ error: 'Scan not found' });
+        return apiError(res, 404, ErrorCodes.SCAN_NOT_FOUND, 'Scan not found', req.requestId);
       }
 
       let entries;
@@ -223,21 +251,21 @@ export function createScansRouter(db, dataDir) {
       res.json({ files });
     } catch (err) {
       console.error('GET /scans/:id/artifacts error:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      apiError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Internal server error', req.requestId);
     }
   });
 
   // GET /:id/artifacts/:filename — Download a specific artifact file
-  router.get('/:id/artifacts/:filename', async (req, res) => {
+  router.get('/:id/artifacts/:filename', requireScope('scans:read'), async (req, res) => {
     try {
       const scan = await getScan(db, req.params.id);
       if (!scan) {
-        return res.status(404).json({ error: 'Scan not found' });
+        return apiError(res, 404, ErrorCodes.SCAN_NOT_FOUND, 'Scan not found', req.requestId);
       }
 
       const { filename } = req.params;
       if (filename.includes('..') || filename.includes('/')) {
-        return res.status(400).json({ error: 'Invalid filename' });
+        return apiError(res, 400, ErrorCodes.INVALID_INPUT, 'Invalid filename', req.requestId);
       }
 
       const filePath = join(scan.scan_dir, filename);
@@ -245,14 +273,14 @@ export function createScansRouter(db, dataDir) {
       try {
         content = readFileSync(filePath, 'utf-8');
       } catch {
-        return res.status(404).json({ error: 'File not found' });
+        return apiError(res, 404, ErrorCodes.FILE_NOT_FOUND, 'File not found', req.requestId);
       }
 
       res.set('Content-Type', 'application/json');
       res.send(content);
     } catch (err) {
       console.error('GET /scans/:id/artifacts/:filename error:', err);
-      res.status(500).json({ error: 'Internal server error' });
+      apiError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Internal server error', req.requestId);
     }
   });
 

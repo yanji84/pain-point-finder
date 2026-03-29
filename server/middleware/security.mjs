@@ -45,7 +45,7 @@ export function rateLimiter({ windowMs = 60_000, max = 60, keyFn } = {}) {
       const retryAfter = Math.ceil((timestamps[0] - windowStart) / 1000);
       res.setHeader('Retry-After', String(retryAfter));
       res.writeHead(429, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Too many requests. Try again later.' }));
+      res.end(JSON.stringify({ error: { code: 'RATE_LIMITED', message: 'Too many requests. Try again later.', request_id: req.requestId || null } }));
       return;
     }
 
@@ -86,7 +86,7 @@ export function requestSizeLimiter(maxBytes = 1_048_576) {
     const contentLength = req.headers['content-length'];
     if (contentLength && parseInt(contentLength, 10) > maxBytes) {
       res.writeHead(413, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Payload too large.' }));
+      res.end(JSON.stringify({ error: { code: 'INVALID_INPUT', message: 'Payload too large.', request_id: req.requestId || null } }));
       return;
     }
     next();

@@ -3,6 +3,8 @@ import { spawn } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { getScan, getOrCreateChatSession, updateChatSessionClaudeId, addChatMessage, getChatMessages } from '../db.mjs';
+import { apiError, ErrorCodes } from '../middleware/errors.mjs';
+import { requireScope } from '../auth.mjs';
 
 const CHAT_TIMEOUT_MS = 120_000; // 2 minutes
 
@@ -10,27 +12,27 @@ export function createChatRouter(db, dataDir) {
   const router = Router();
 
   // GET /scans/:scanId/chat — get chat history
-  router.get('/scans/:scanId/chat', (req, res) => {
+  router.get('/scans/:scanId/chat', requireScope('chat:read'), (req, res) => {
     try {
       const scan = getScan(db, req.params.scanId);
-      if (!scan) return res.status(404).json({ error: 'Scan not found' });
+      if (!scan) return apiError(res, 404, ErrorCodes.SCAN_NOT_FOUND, 'Scan not found', req.requestId);
 
       const session = getOrCreateChatSession(db, scan.id);
       const messages = getChatMessages(db, session.id);
       res.json({ session, messages });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      apiError(res, 500, ErrorCodes.INTERNAL_ERROR, err.message, req.requestId);
     }
   });
 
   // POST /scans/:scanId/chat — send a message, get response
-  router.post('/scans/:scanId/chat', (req, res) => {
+  router.post('/scans/:scanId/chat', requireScope('chat:write'), (req, res) => {
     try {
       const scan = getScan(db, req.params.scanId);
-      if (!scan) return res.status(404).json({ error: 'Scan not found' });
+      if (!scan) return apiError(res, 404, ErrorCodes.SCAN_NOT_FOUND, 'Scan not found', req.requestId);
 
       const { message } = req.body;
-      if (!message || !message.trim()) return res.status(400).json({ error: 'Message required' });
+      if (!message || !message.trim()) return apiError(res, 400, ErrorCodes.MESSAGE_REQUIRED, 'Message required', req.requestId);
 
       const session = getOrCreateChatSession(db, scan.id);
 
@@ -230,12 +232,12 @@ ${message}`;
         if (responded) return;
         responded = true;
         console.error('[chat] spawn error:', err.message);
-        res.status(500).json({ error: 'Failed to start AI: ' + err.message });
+        apiError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Failed to start AI: ' + err.message, req.requestId);
       });
 
     } catch (err) {
       if (!res.headersSent) {
-        res.status(500).json({ error: err.message });
+        apiError(res, 500, ErrorCodes.INTERNAL_ERROR, err.message, req.requestId);
       }
     }
   });

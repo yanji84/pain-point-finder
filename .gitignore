@@ -8,3 +8,9 @@ node_modules/
 *.key
 .gstack/
 team/
+data/
+.claude/worktrees/
+scan-hn-*.mjs
+scanner-hn-*.mjs
+filter-hn-results.mjs
+sim-demand-brief.pdf
